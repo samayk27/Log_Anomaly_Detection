@@ -6,6 +6,7 @@ import { PipelineView } from "@/components/dashboard/PipelineView";
 import { AnomalyDetection } from "@/components/dashboard/AnomalyDetection";
 import { FeatureTable } from "@/components/dashboard/FeatureTable";
 import { FileUpload } from "@/components/dashboard/FileUpload";
+import { DatasetBrowser } from "@/components/dashboard/DatasetBrowser";
 import { SystemMetrics } from "@/components/dashboard/SystemMetrics";
 import { PipelineResult } from "@/lib/logParser";
 import {
@@ -13,11 +14,13 @@ import {
   fetchStats,
   fetchRecentAnomalies,
   fetchFeatures,
+  fetchDatasets,
   ingestLogs,
   checkBackend,
   type ApiLogEntry,
   type StatsResponse,
   type RecentAnomaly,
+  type DatasetInventory,
 } from "@/api/logApi";
 import { LogEntry, AnomalyPoint, FeatureVector } from "@/types/dataTypes";
 import { Clock, Database, Cpu } from "lucide-react";
@@ -76,6 +79,7 @@ const Index = () => {
   const [backendFeatures, setBackendFeatures] = useState<FeatureVector[]>([]);
   const [backendLoading, setBackendLoading] = useState(false);
   const [liveRefresh, setLiveRefresh] = useState(false);
+  const [datasetInventory, setDatasetInventory] = useState<DatasetInventory | null>(null);
 
   const refetchBackend = useCallback(async () => {
     setBackendLoading(true);
@@ -111,7 +115,10 @@ const Index = () => {
   useEffect(() => {
     checkBackend().then((ok) => {
       setBackendAvailable(ok);
-      if (ok) refetchBackend();
+      if (ok) {
+        refetchBackend().then(() => setDataSource("backend"));
+        fetchDatasets().then(setDatasetInventory).catch(() => setDatasetInventory(null));
+      }
     });
   }, [refetchBackend]);
 
@@ -225,13 +232,23 @@ const Index = () => {
         </header>
         <div className="p-8">
           {activeTab === "upload" && (
-            <FileUpload
-              onPipelineComplete={handlePipelineComplete}
-              onClearSystem={handleClearSystem}
-              onBackendIngest={
-                backendAvailable ? handleBackendIngest : undefined
-              }
-            />
+            <div className="space-y-6">
+              <FileUpload
+                onPipelineComplete={handlePipelineComplete}
+                onClearSystem={handleClearSystem}
+                onBackendIngest={
+                  backendAvailable ? handleBackendIngest : undefined
+                }
+              />
+              <DatasetBrowser
+                inventory={datasetInventory}
+                onInventoryChange={setDatasetInventory}
+                onAnalysisComplete={async () => {
+                  await refetchBackend();
+                  setDataSource("backend");
+                }}
+              />
+            </div>
           )}
           {activeTab === "overview" && (
             <OverviewTab

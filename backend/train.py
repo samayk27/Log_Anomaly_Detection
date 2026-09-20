@@ -1,5 +1,5 @@
 """
-Training + evaluation pipeline for SEAPM anomaly detection.
+Training and evaluation pipeline for log anomaly detection.
 
 This script:
 1) Loads all supported datasets under datasets/
@@ -9,6 +9,7 @@ This script:
 5) Retrains final model on full corpus and saves artifacts
 """
 import json
+import random
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,6 +34,8 @@ from backend.parser.log_parser import parse_logs
 from backend.preprocessing.log_processor import process_logs
 
 DATASET_DIR = project_root / "datasets"
+TRAIN_DATASET_DIR = DATASET_DIR / "train"
+TEST_DATASET_DIR = DATASET_DIR / "test"
 SUPPORTED_SUFFIXES = {".txt", ".log", ".csv", ".json"}
 METRICS_PATH = project_root / "backend" / "models" / "evaluation_metrics.json"
 RANDOM_STATE = 42
@@ -40,30 +43,66 @@ GOLD_CSV_PATH = project_root / "datasets" / "labeled_eval.csv"
 EXCLUDED_DATASET_FILENAMES = {GOLD_CSV_PATH.name}
 
 
-def discover_dataset_paths() -> list[Path]:
-    """Discover dataset files from datasets/ folder."""
-    if not DATASET_DIR.exists():
+def discover_dataset_paths(dataset_dir: Path = TRAIN_DATASET_DIR) -> list[Path]:
+    """Discover supported log files recursively under a dataset directory."""
+    if not dataset_dir.exists():
         return []
     paths = [
-        p for p in sorted(DATASET_DIR.iterdir())
+        p for p in sorted(dataset_dir.rglob('*'))
         if p.is_file() and p.suffix.lower() in SUPPORTED_SUFFIXES
         and p.name not in EXCLUDED_DATASET_FILENAMES
     ]
     return paths
 
 
-def load_processed_logs() -> tuple[list[dict], list[str]]:
+def load_processed_logs(dataset_dir: Path = TRAIN_DATASET_DIR) -> tuple[list[dict], list[str]]:
     """Load, parse and preprocess logs from all dataset files."""
     records: list[dict] = []
     sources: list[str] = []
-    for path in discover_dataset_paths():
+    for path in discover_dataset_paths(dataset_dir):
         content = path.read_text(encoding="utf-8", errors="ignore")
         parsed = parse_logs(content)
         processed = process_logs(parsed)
         valid = [p for p in processed if (p.get("cleaned_message") or p.get("message", ""))]
         records.extend(valid)
-        sources.append(path.name)
+        sources.append(str(path.relative_to(dataset_dir)))
     return records, sources
+
+
+def split_dataset(test_ratio: float = 0.2, random_state: int = RANDOM_STATE) -> dict:
+    """Split each file in datasets/train into train and datasets/test copies."""
+    if not 0 < test_ratio < 1:
+        raise ValueError("test_ratio must be between 0 and 1")
+
+    source_paths = discover_dataset_paths(TRAIN_DATASET_DIR)
+    if not source_paths:
+        raise ValueError("No supported dataset files found under datasets/")
+
+    summary = {"test_ratio": test_ratio, "random_state": random_state, "files": []}
+    for source_path in source_paths:
+        lines = [line for line in source_path.read_text(encoding="utf-8", errors="ignore").splitlines() if line.strip()]
+        if len(lines) < 2:
+            continue
+        shuffled = list(lines)
+        random.Random(random_state).shuffle(shuffled)
+        test_count = max(1, round(len(shuffled) * test_ratio))
+        test_lines = shuffled[:test_count]
+        train_lines = shuffled[test_count:]
+        relative_path = source_path.relative_to(TRAIN_DATASET_DIR)
+        test_path = TEST_DATASET_DIR / relative_path
+        test_path.parent.mkdir(parents=True, exist_ok=True)
+        # Rewrite the source file so no held-out record remains in training.
+        source_path.write_text("\n".join(train_lines) + "\n", encoding="utf-8")
+        test_path.write_text("\n".join(test_lines) + "\n", encoding="utf-8")
+        summary["files"].append({
+            "path": str(relative_path),
+            "records": len(lines),
+            "train_records": len(train_lines),
+            "test_records": len(test_lines),
+        })
+    if not summary["files"]:
+        raise ValueError("Dataset files must contain at least two non-empty lines")
+    return summary
 
 
 def load_messages() -> list[str]:
@@ -71,7 +110,7 @@ def load_messages() -> list[str]:
     Backward-compatible helper used by API startup fallback.
     Returns cleaned messages from all discovered dataset files.
     """
-    records, _ = load_processed_logs()
+    records, _ = load_processed_logs(TRAIN_DATASET_DIR)
     msgs = [(r.get("cleaned_message") or r.get("message", "")).strip() for r in records]
     return [m for m in msgs if len(m) > 3]
 
@@ -89,34 +128,56 @@ def _record_message(record: dict) -> str:
 
 
 def main():
-    records, sources = load_processed_logs()
-    if not records:
+    source_paths = discover_dataset_paths(TRAIN_DATASET_DIR)
+    test_paths = discover_dataset_paths(TEST_DATASET_DIR)
+    if source_paths and not test_paths:
+        split_dataset()
+        source_paths = discover_dataset_paths(TRAIN_DATASET_DIR)
+        test_paths = discover_dataset_paths(TEST_DATASET_DIR)
+
+    explicit_split = bool(source_paths and test_paths)
+    if explicit_split:
+        records, sources = load_processed_logs(TRAIN_DATASET_DIR)
+        test_logs, test_sources = load_processed_logs(TEST_DATASET_DIR)
+        train_records = records
+        train_idx = list(range(len(train_records)))
+        test_idx = list(range(len(test_logs)))
+        labels = build_silver_labels(test_logs)
+        sources = [f"train/{source}" for source in sources] + [f"test/{source}" for source in test_sources]
+    else:
+        records, sources = load_processed_logs(TRAIN_DATASET_DIR)
+        train_records = records
+        test_logs = []
+        labels = build_silver_labels(records)
+
+    if not train_records:
         print("No parseable logs found under datasets/.")
         sys.exit(1)
 
-    messages = _records_to_messages(records)
-    labels = build_silver_labels(records)
+    messages = _records_to_messages(train_records)
     positives = sum(labels)
     negatives = len(labels) - positives
 
-    if positives > 0 and negatives > 0:
-        train_idx, test_idx = train_test_split(
-            list(range(len(records))),
-            test_size=0.2,
-            random_state=RANDOM_STATE,
-            stratify=labels,
-        )
-    else:
-        train_idx, test_idx = train_test_split(
-            list(range(len(records))),
-            test_size=0.2,
-            random_state=RANDOM_STATE,
-        )
+    if not explicit_split:
+        if positives > 0 and negatives > 0:
+            train_idx, test_idx = train_test_split(
+                list(range(len(train_records))),
+                test_size=0.2,
+                random_state=RANDOM_STATE,
+                stratify=labels,
+            )
+        else:
+            train_idx, test_idx = train_test_split(
+                list(range(len(train_records))),
+                test_size=0.2,
+                random_state=RANDOM_STATE,
+            )
+        test_logs = [train_records[i] for i in test_idx]
+        labels = [labels[i] for i in test_idx]
 
-    train_messages = [_record_message(records[i]) for i in train_idx]
-    test_logs = [records[i] for i in test_idx]
-    test_messages = [_record_message(records[i]) for i in test_idx]
-    y_test = [labels[i] for i in test_idx]
+    train_messages = [_record_message(train_records[i]) for i in train_idx]
+    test_messages = [_record_message(record) for record in test_logs]
+    y_test = labels
 
     print(f"Datasets used: {', '.join(sources)}")
     print(f"Total parsed records: {len(records)}")
@@ -156,14 +217,14 @@ def main():
                 }
                 used_labeling = "gold"
 
-    # Train final production model on full corpus
+    # With an explicit split, keep the test records out of the production model.
     full_model, full_vectorizer = train(messages)
 
     payload = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "dataset": {
             "files": sources,
-            "total_records": len(records),
+            "total_records": len(train_records) + len(test_logs),
             "train_records": len(train_messages),
             "test_records": len(test_messages),
             "silver_label_distribution": {

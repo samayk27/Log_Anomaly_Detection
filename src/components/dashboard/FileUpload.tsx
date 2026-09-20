@@ -21,7 +21,7 @@ type HistoryEntry = {
   result: PipelineResult;
 };
 
-const HISTORY_KEY = 'seapm_upload_history_v1';
+const HISTORY_KEY = 'log_anomaly_upload_history_v1';
 
 export function FileUpload({ onPipelineComplete, onClearSystem, onBackendIngest }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);

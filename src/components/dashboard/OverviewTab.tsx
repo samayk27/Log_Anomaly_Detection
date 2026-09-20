@@ -67,6 +67,8 @@ export function OverviewTab({
   }, [logs, timeSeriesData, apiStats]);
 
   const hasData = logs.length > 0;
+  const criticalErrors = logs
+    .filter((log) => log.level === "ERROR");
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -127,6 +129,42 @@ export function OverviewTab({
           variant={apiStats ? "success" : "default"}
           progress={stats.total > 0 ? ((apiStats ? (stats.normal ?? 0) : stats.templates) / stats.total) * 100 : 0}
         />
+      </div>
+
+      <div className="glass-card rounded-lg border border-destructive/30 p-6">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-medium text-foreground">Critical Errors</h3>
+            <p className="text-xs text-muted-foreground">
+              Error-level events requiring investigation
+            </p>
+          </div>
+          <span className="rounded-md bg-destructive/10 px-2 py-1 text-xs font-semibold text-destructive">
+            {stats.errors} total
+          </span>
+        </div>
+        {criticalErrors.length > 0 ? (
+          <div className="max-h-[32rem] overflow-y-auto divide-y divide-border rounded-lg border border-border">
+            {criticalErrors.map((log) => (
+              <div key={log.id} className="grid grid-cols-[auto_1fr_auto] items-start gap-3 px-3 py-3 text-xs">
+                <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-foreground">{log.raw}</p>
+                  <p className="mt-1 text-muted-foreground">
+                    {log.component || "System"} {log.detection_reason ? `· ${log.detection_reason}` : ""}
+                  </p>
+                </div>
+                <time className="whitespace-nowrap font-mono text-muted-foreground">
+                  {log.timestamp || "Unknown time"}
+                </time>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-xs text-muted-foreground">
+            No critical errors in the current dataset.
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

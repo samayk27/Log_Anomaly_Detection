@@ -279,6 +279,164 @@ class IngestRequest(BaseModel):
     content: str
 
 
+class DatasetSplitRequest(BaseModel):
+    test_ratio: float = 0.2
+    random_state: int = 42
+
+
+class DatasetAnalyzeRequest(BaseModel):
+    paths: list[str] = []
+
+
+@app.get("/datasets")
+async def get_datasets():
+    """List recursively discovered source datasets and generated split status."""
+    from backend.train import DATASET_DIR, TEST_DATASET_DIR, TRAIN_DATASET_DIR, discover_dataset_paths
+
+    datasets = []
+    for path in discover_dataset_paths(TEST_DATASET_DIR):
+        try:
+            parsed = parse_logs(path.read_text(encoding="utf-8", errors="ignore"))
+            records = len(parsed)
+        except OSError:
+            records = 0
+        datasets.append({
+            "path": str(path.relative_to(TEST_DATASET_DIR)),
+            "name": path.name,
+            "extension": path.suffix.lower(),
+            "size_bytes": path.stat().st_size,
+            "records": records,
+        })
+    return {
+        "datasets": datasets,
+        "split": {
+            "available": TEST_DATASET_DIR.exists() and bool(discover_dataset_paths(TEST_DATASET_DIR)),
+            "train_path": str(TRAIN_DATASET_DIR.relative_to(DATASET_DIR)),
+            "test_path": str(TEST_DATASET_DIR.relative_to(DATASET_DIR)),
+        },
+    }
+
+
+@app.post("/datasets/split")
+async def split_datasets(req: DatasetSplitRequest):
+    """Create deterministic recursive train/test files from source datasets."""
+    from backend.train import split_dataset
+
+    try:
+        return {"message": "Dataset split created", "split": split_dataset(req.test_ratio, req.random_state)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/datasets/train")
+async def train_split_datasets():
+    """Train the saved model using datasets/train only."""
+    from backend.train import TEST_DATASET_DIR, TRAIN_DATASET_DIR, load_processed_logs, split_dataset
+    from backend.ml.anomaly_model import train as train_model
+
+    if not TRAIN_DATASET_DIR.exists():
+        raise HTTPException(status_code=400, detail="No datasets/train directory found")
+    if not TEST_DATASET_DIR.exists() or not any(TEST_DATASET_DIR.rglob("*")):
+        try:
+            split_dataset()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    records, sources = load_processed_logs(TRAIN_DATASET_DIR)
+    messages = [record.get("cleaned_message") or record.get("message", "") for record in records]
+    if not messages:
+        raise HTTPException(status_code=400, detail="datasets/train contains no parseable logs")
+    train_model(messages)
+    return {"message": "Model trained on generated training split", "train_sources": sources, "train_records": len(messages)}
+
+
+@app.post("/datasets/evaluate")
+async def evaluate_split_datasets():
+    """Evaluate the saved model against generated test records only."""
+    from backend.train import TEST_DATASET_DIR, TRAIN_DATASET_DIR, load_processed_logs
+    from backend.ml.evaluation import build_hybrid_predictions, build_silver_labels, evaluate_binary
+
+    if not TRAIN_DATASET_DIR.exists() or not TEST_DATASET_DIR.exists():
+        raise HTTPException(status_code=400, detail="Create datasets/test by training first")
+    model, vectorizer = _get_ml_components()
+    if model is None or vectorizer is None:
+        raise HTTPException(status_code=400, detail="Train the model before evaluating the test split")
+
+    test_logs, sources = load_processed_logs(TEST_DATASET_DIR)
+    if not test_logs:
+        raise HTTPException(status_code=400, detail="The generated test split contains no parseable logs")
+    test_messages = [log.get("cleaned_message") or log.get("message", "") for log in test_logs]
+    labels = build_silver_labels(test_logs)
+    ml_output = predict(test_messages, model, vectorizer)
+    ml_labels = [1 if result["prediction"] == "Anomaly" else 0 for result in ml_output]
+    hybrid_labels = build_hybrid_predictions(test_logs, ml_labels)
+    return {
+        "test_sources": sources,
+        "test_records": len(test_logs),
+        "labeling": "silver",
+        "ml_only": evaluate_binary(labels, ml_labels),
+        "hybrid_ml_rules": evaluate_binary(labels, hybrid_labels),
+    }
+
+
+@app.post("/datasets/analyze")
+async def analyze_datasets(req: DatasetAnalyzeRequest):
+    """Analyze selected generated test files and publish them to the dashboard."""
+    from backend.train import TEST_DATASET_DIR, discover_dataset_paths
+
+    model, vectorizer = _get_ml_components()
+    if model is None or vectorizer is None:
+        raise HTTPException(status_code=400, detail="Train the model before analyzing test datasets")
+
+    available = [path.resolve() for path in discover_dataset_paths(TEST_DATASET_DIR)]
+    selected = req.paths or [str(path.relative_to(TEST_DATASET_DIR)) for path in available]
+    selected_paths = []
+    test_root = TEST_DATASET_DIR.resolve()
+    for relative_path in selected:
+        candidate = (TEST_DATASET_DIR / relative_path).resolve()
+        try:
+            candidate.relative_to(test_root)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid test dataset path: {relative_path}") from exc
+        if candidate not in available:
+            raise HTTPException(status_code=404, detail=f"Test dataset not found: {relative_path}")
+        selected_paths.append(candidate)
+
+    parsed_logs = []
+    for path in selected_paths:
+        parsed_logs.extend(parse_logs(path.read_text(encoding="utf-8", errors="ignore")))
+    processed = process_logs(parsed_logs)
+    messages = [log.get("cleaned_message") or log.get("message", "") for log in processed]
+    ml_predictions = predict(messages, model, vectorizer)
+
+    results = []
+    for index, (log, prediction) in enumerate(zip(processed, ml_predictions)):
+        rule_result = run_rules_single(log, processed, index)
+        dataset_label = log.get("dataset_label")
+        if dataset_label in (0, 1):
+            final = "Anomaly" if dataset_label else "Normal"
+            source = "Dataset label"
+            reason = "BGL benchmark label"
+        else:
+            final, source, reason = combine_with_ml(rule_result, prediction["prediction"])
+        results.append({
+            "prediction": final,
+            "confidence": prediction["confidence"],
+            "source": source,
+            "detection_reason": reason,
+            "rule_triggered": rule_result.triggered if rule_result else False,
+        })
+
+    global _stored_logs, _stored_predictions
+    _stored_logs = processed
+    _stored_predictions = results
+    return {
+        "message": "Selected test datasets analyzed",
+        "paths": selected,
+        "count": len(processed),
+        "anomalies": sum(1 for result in results if result["prediction"] == "Anomaly"),
+    }
+
+
 @app.post("/ingest")
 async def ingest_logs(req: IngestRequest):
     """Ingest and process a batch of logs. Used by upload flow."""
@@ -312,7 +470,13 @@ async def ingest_logs(req: IngestRequest):
     results = []
     for i, (log, mp) in enumerate(zip(processed, ml_preds)):
         rule_res = run_rules_single(log, processed, i)
-        final, source, reason = combine_with_ml(rule_res, mp["prediction"])
+        dataset_label = log.get("dataset_label")
+        if dataset_label in (0, 1):
+            final = "Anomaly" if dataset_label else "Normal"
+            source = "Dataset label"
+            reason = "BGL benchmark label"
+        else:
+            final, source, reason = combine_with_ml(rule_res, mp["prediction"])
         results.append({
             "prediction": final,
             "confidence": mp["confidence"],

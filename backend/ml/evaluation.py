@@ -48,6 +48,10 @@ def build_silver_labels(logs: list[dict]) -> list[int]:
     """
     labels: list[int] = []
     for idx, log in enumerate(logs):
+        dataset_label = log.get("dataset_label")
+        if dataset_label in (0, 1):
+            labels.append(int(dataset_label))
+            continue
         msg = (log.get("message") or log.get("raw") or "").lower()
         level = str(log.get("log_level") or "").upper()
         rule_triggered = run_rules_single(log, logs, idx) is not None

@@ -4,6 +4,8 @@ Extracts: timestamp, service, log_level, message, ip_address, user_id, status_co
 """
 import re
 import json
+import csv
+from io import StringIO
 from typing import Any
 from dataclasses import dataclass, asdict
 
@@ -20,6 +22,7 @@ class ParsedLog:
     status_code: str | None
     raw: str
     log_type: str
+    dataset_label: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -33,10 +36,25 @@ JSON_TIMESTAMP_RE = re.compile(
     r'\d{4}[-/]\d{2}[-/]\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?'
 )
 TIMESTAMP_RE = re.compile(
-    r'^(\d{4}[-/]\d{2}[-/]\d{2}[\sT]\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s*'
+    r'^(?P<timestamp>(?:\d{4}[-/.]\d{2}[-/.]\d{2}[\sT]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?'
+    r'|\d{4}[-/.]\d{2}[-/.]\d{2}'
+    r'|\d{2,6}[\s-]\d{2}:?\d{2}:?\d{2}'
+    r'|\d{2}:\d{2}:\d{2}(?:[.,]\d+)?))\s*'
+)
+ANY_TIMESTAMP_RE = re.compile(
+    r'(?P<timestamp>\d{4}[-/.]\d{2}[-/.]\d{2}[\sT]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?'
+    r'|\d{4}[-/.]\d{2}[-/.]\d{2}'
+    r'|\d{2,6}[\s-]\d{2}:?\d{2}:?\d{2}'
+    r'|\d{2}:\d{2}:\d{2}(?:[.,]\d+)?)'
 )
 LEVEL_RE = re.compile(
-    r'\b(INFO|WARN|WARNING|ERROR|DEBUG|TRACE|FATAL|CRITICAL)\b', re.I
+    r'\b(EMERG|ALERT|CRIT|CRITICAL|FATAL|ERROR|ERR|WARNING|WARN|NOTICE|INFO|DEBUG|TRACE|SEVERE)\b', re.I
+)
+BGL_RE = re.compile(
+    r'^\S+\s+\d+\s+\d{4}\.\d{2}\.\d{2}\s+\S+\s+'
+    r'\d{4}-\d{2}-\d{2}-\d{2}\.\d{2}\.\d{2}\.\d+\s+\S+\s+\S+\s+\S+\s+'
+    r'(?:EMERG|ALERT|CRIT|CRITICAL|FATAL|ERROR|ERR|WARNING|WARN|NOTICE|INFO|DEBUG|TRACE|SEVERE)\b',
+    re.I,
 )
 IP_RE = re.compile(
     r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'
@@ -55,8 +73,10 @@ HTTP_STATUS_RE = re.compile(
 
 def _normalize_level(raw: str) -> str:
     u = raw.upper()
-    if u in ('WARNING', 'CRITICAL', 'FATAL'):
+    if u in ('EMERG', 'ALERT', 'CRIT', 'CRITICAL', 'FATAL', 'SEVERE', 'ERR'):
         return 'ERROR'
+    if u in ('WARNING', 'NOTICE'):
+        return 'WARN'
     if u == 'TRACE':
         return 'DEBUG'
     return u if u in ('INFO', 'WARN', 'ERROR', 'DEBUG') else 'INFO'
@@ -111,6 +131,8 @@ def detect_log_type(line: str) -> str:
             return 'json'
         except json.JSONDecodeError:
             pass
+    if BGL_RE.match(line):
+        return 'bgl'
     # csv detection: require at least three commas and a timestamp start.  Many
     # application messages contain commas, so we avoid false positives.
     if TIMESTAMP_RE.match(line) and line.count(',') >= 3:
@@ -149,13 +171,13 @@ def parse_json(line: str) -> ParsedLog | None:
         if isinstance(ts, (int, float)):
             from datetime import datetime
             ts = datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
-        level = _normalize_level(
-            str(data.get('level', data.get('log_level', 'INFO')))
-        )
-        msg = data.get('message', data.get('msg', str(data)))
+        level = _normalize_level(str(
+            data.get('level', data.get('log_level', data.get('severity', 'INFO')))
+        ))
+        msg = data.get('message', data.get('msg', data.get('event', str(data))))
         return ParsedLog(
             timestamp=str(ts)[:19] if ts else '',
-            service=str(data.get('service', data.get('service_name', _guess_service(msg)))),
+            service=str(data.get('service', data.get('service_name', data.get('logger', _guess_service(str(msg)))))),
             log_level=level,
             message=str(msg),
             ip_address=data.get('ip', data.get('ip_address', _extract_ip(str(msg)))),
@@ -168,9 +190,29 @@ def parse_json(line: str) -> ParsedLog | None:
         return None
 
 
+def parse_bgl(line: str) -> ParsedLog | None:
+    """Parse Blue Gene/L records and remove volatile node identifiers."""
+    parts = line.split(maxsplit=9)
+    if len(parts) < 10:
+        return None
+    label, _, date, _, event_time, _, subsystem, component, level, message = parts
+    return ParsedLog(
+        timestamp=f'{date} {event_time}',
+        service=f'{subsystem}/{component}',
+        log_level=_normalize_level(level),
+        message=message,
+        ip_address=None,
+        user_id=None,
+        status_code=None,
+        raw=line,
+        log_type='bgl',
+        dataset_label=0 if label == '-' else 1,
+    )
+
+
 def parse_csv(line: str) -> ParsedLog | None:
     """Parse CSV-style log (timestamp,service,log_level,message,...)."""
-    parts = [p.strip() for p in line.split(',')]
+    parts = [p.strip() for p in next(csv.reader(StringIO(line)), [])]
     if len(parts) < 4:
         return None
     ts = parts[0] if len(parts) > 0 else ''
@@ -193,7 +235,8 @@ def parse_csv(line: str) -> ParsedLog | None:
 def parse_application(line: str) -> ParsedLog:
     """Parse application log (timestamp level message)."""
     ts_match = TIMESTAMP_RE.match(line)
-    timestamp = ts_match.group(1).replace('T', ' ')[:19] if ts_match else ''
+    timestamp_match = ts_match or ANY_TIMESTAMP_RE.search(line)
+    timestamp = timestamp_match.group('timestamp').replace('T', ' ')[:19] if timestamp_match else ''
     remainder = line[ts_match.end():] if ts_match else line
     lvl_match = LEVEL_RE.search(remainder)
     level = _normalize_level(lvl_match.group(1)) if lvl_match else 'INFO'
@@ -220,15 +263,15 @@ def parse_application(line: str) -> ParsedLog:
         ip_address=_extract_ip(line),
         user_id=_extract_user(line),
         status_code=_extract_status(line),
-        raw=message,
+        raw=line,
         log_type='application'
     )
 
 
 def parse_plain(line: str) -> ParsedLog:
     """Parse plain text log."""
-    ts = TIMESTAMP_RE.search(line)
-    timestamp = ts.group(1).replace('T', ' ')[:19] if ts else ''
+    ts = ANY_TIMESTAMP_RE.search(line)
+    timestamp = ts.group('timestamp').replace('T', ' ')[:19] if ts else ''
     lvl = LEVEL_RE.search(line)
     level = _normalize_level(lvl.group(1)) if lvl else 'INFO'
     message = line.strip()
@@ -240,7 +283,7 @@ def parse_plain(line: str) -> ParsedLog:
         ip_address=_extract_ip(line),
         user_id=_extract_user(line),
         status_code=_extract_status(line),
-        raw=message,
+        raw=line,
         log_type='plain'
     )
 
@@ -255,6 +298,8 @@ def parse_line(line: str) -> ParsedLog | None:
         return parse_apache_nginx(line)
     if log_type == 'json':
         return parse_json(line)
+    if log_type == 'bgl':
+        return parse_bgl(line)
     if log_type == 'csv':
         return parse_csv(line)
     if log_type == 'application':
@@ -267,13 +312,15 @@ def parse_logs(content: str) -> list[dict[str, Any]]:
     Parse multiple log lines and return list of structured dictionaries.
     Also works with file path - reads file if content looks like a path (single line).
     """
-    lines = content.split('\n') if '\n' in content or content.strip() else []
-    if not lines and len(content) < 260:
+    lines = []
+    if '\n' not in content and len(content) < 260:
         try:
             with open(content, 'r', encoding='utf-8', errors='ignore') as f:
                 lines = f.readlines()
         except (OSError, IOError):
             pass
+    if not lines:
+        lines = content.splitlines()
     results = []
     for i, line in enumerate(lines):
         parsed = parse_line(line)

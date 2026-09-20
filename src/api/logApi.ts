@@ -48,6 +48,38 @@ export interface RecentAnomaly {
   log_level?: string;
 }
 
+export interface DatasetInfo {
+  path: string;
+  name: string;
+  extension: string;
+  size_bytes: number;
+  records: number;
+}
+
+export interface DatasetInventory {
+  datasets: DatasetInfo[];
+  split: {
+    available: boolean;
+    train_path: string;
+    test_path: string;
+  };
+}
+
+export interface DatasetEvaluation {
+  test_sources: string[];
+  test_records: number;
+  labeling: string;
+  ml_only: { accuracy: number; precision: number; recall: number; f1_score: number };
+  hybrid_ml_rules: { accuracy: number; precision: number; recall: number; f1_score: number };
+}
+
+export interface DatasetAnalysisResult {
+  message: string;
+  paths: string[];
+  count: number;
+  anomalies: number;
+}
+
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const err = await res.text();
@@ -103,4 +135,38 @@ export async function checkBackend(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export async function fetchDatasets(): Promise<DatasetInventory> {
+  const res = await fetch(`${API_BASE}/datasets`);
+  return handleResponse(res);
+}
+
+export async function splitDatasets(testRatio = 0.2): Promise<DatasetInventory> {
+  const res = await fetch(`${API_BASE}/datasets/split`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ test_ratio: testRatio, random_state: 42 }),
+  });
+  await handleResponse(res);
+  return fetchDatasets();
+}
+
+export async function evaluateDatasets(): Promise<DatasetEvaluation> {
+  const res = await fetch(`${API_BASE}/datasets/evaluate`, { method: "POST" });
+  return handleResponse(res);
+}
+
+export async function trainOnSplit(): Promise<{ train_records: number }> {
+  const res = await fetch(`${API_BASE}/datasets/train`, { method: "POST" });
+  return handleResponse(res);
+}
+
+export async function analyzeDatasets(paths: string[]): Promise<DatasetAnalysisResult> {
+  const res = await fetch(`${API_BASE}/datasets/analyze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ paths }),
+  });
+  return handleResponse(res);
 }

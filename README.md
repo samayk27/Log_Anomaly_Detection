@@ -1,4 +1,4 @@
-# SEAPM CP - Scalable Enterprise Anomaly Detection & Performance Monitoring
+# Log Anomaly Detection
 
 **Intelligent log analysis platform combining machine learning and rule-based detection for real-time anomaly detection in distributed systems.**
 
@@ -26,7 +26,7 @@
 
 ## 🎯 Overview
 
-SEAPM CP is an enterprise-grade anomaly detection system that analyzes application and system logs in real-time. It combines:
+This is an enterprise-grade anomaly detection system that analyzes application and system logs in real-time. It combines:
 
 - **Machine Learning**: Unsupervised Isolation Forest for pattern-based anomaly detection
 - **Rule Engine**: 6 signature-based detection patterns for known attack types
@@ -127,6 +127,14 @@ SEAPM CP is an enterprise-grade anomaly detection system that analyzes applicati
 - **Confidence Scoring**: Probabilistic anomaly scores for decision making
 - **Auto-training**: Automatic model training on startup if models are missing
 
+### Testing with LogHub datasets
+
+Place one or more LogHub dataset files under `datasets/` (nested folders are supported), then run `python backend/train.py` from the project root. The loader accepts `.txt`, `.log`, `.csv`, and `.json` files and recursively discovers them. The parser handles common LogHub formats including HDFS-style timestamps, BGL-style date prefixes, syslog-like lines, Apache/Nginx, JSON, and quoted CSV records.
+
+For a held-out test workflow, place source files under `datasets/train/` and use the **Available datasets** panel on the upload screen. It recursively lists those files, keeps each file's relative path, removes a deterministic 20% holdout from each source file, writes the holdout to `datasets/test/`, trains only from the remaining `datasets/train/` records, and evaluates only `datasets/test/`. The same operations are available through `GET /datasets`, `POST /datasets/split`, `POST /datasets/train`, and `POST /datasets/evaluate`.
+
+LogHub datasets often provide anomaly labels in a separate file. The current training pipeline uses rule/heuristic-derived silver labels unless `datasets/labeled_eval.csv` is supplied in the project's supported evaluation schema. Keep a dataset's raw log file and labels separate from the training corpus when you want an independent evaluation.
+
 ### Rule Engine
 
 - **6 Detection Patterns**: Covers common security and performance anomalies
@@ -214,7 +222,7 @@ print(f"Anomalies detected: {stats['anomaly_count']}")
 
 ## 🔌 API Endpoints
 
-The SEAPM CP API provides RESTful endpoints for log analysis and data retrieval.
+The API provides RESTful endpoints for log analysis and data retrieval.
 
 ### Core Endpoints
 
@@ -378,7 +386,7 @@ Get extracted features for machine learning analysis.
 ## 📁 Project Structure
 
 ```
-SEAPM_CP/
+Log_Anomaly_Detection/
 ├── backend/                    # Python backend
 │   ├── api/
 │   │   └── server.py          # FastAPI server with endpoints
@@ -409,7 +417,7 @@ SEAPM_CP/
 
 ## 🤝 Contributing
 
-We welcome contributions to SEAPM CP! Please follow these steps:
+We welcome contributions! Please follow these steps:
 
 1. **Fork** the repository
 2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)

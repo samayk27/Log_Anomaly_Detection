@@ -1,15 +1,20 @@
 {
-  "generated_at_utc": "2026-05-04T12:11:23.309258+00:00",
+  "generated_at_utc": "2026-09-20T08:59:21.565534+00:00",
   "dataset": {
     "files": [
-      "comprehensive_logs_50k.txt"
+      "train/BGL_2k.log",
+      "train/HDFS_2k.log",
+      "train/comprehensive_logs_50k.txt",
+      "test/BGL_2k.log",
+      "test/HDFS_2k.log",
+      "test/comprehensive_logs_50k.txt"
     ],
-    "total_records": 47500,
-    "train_records": 38000,
-    "test_records": 9500,
+    "total_records": 51500,
+    "train_records": 41200,
+    "test_records": 10300,
     "silver_label_distribution": {
-      "normal": 46622,
-      "anomaly": 878
+      "normal": 10076,
+      "anomaly": 224
     }
   },
   "model": {
@@ -34,10 +39,10 @@
     "used_labeling": "silver",
     "silver_metrics": {
       "ml_only": {
-        "accuracy": 0.8458,
-        "precision": 0.0918,
-        "recall": 0.8239,
-        "f1_score": 0.1652,
+        "accuracy": 0.8279,
+        "precision": 0.1067,
+        "recall": 0.9375,
+        "f1_score": 0.1915,
         "confusion_matrix": {
           "labels": [
             "normal",
@@ -45,30 +50,30 @@
           ],
           "matrix": [
             [
-              7890,
-              1434
+              8317,
+              1759
             ],
             [
-              31,
-              145
+              14,
+              210
             ]
           ],
-          "tn": 7890,
-          "fp": 1434,
-          "fn": 31,
-          "tp": 145
+          "tn": 8317,
+          "fp": 1759,
+          "fn": 14,
+          "tp": 210
         },
         "support": {
-          "normal": 9324,
-          "anomaly": 176,
-          "total": 9500
+          "normal": 10076,
+          "anomaly": 224,
+          "total": 10300
         }
       },
       "hybrid_ml_rules": {
-        "accuracy": 0.8477,
-        "precision": 0.1021,
-        "recall": 0.9261,
-        "f1_score": 0.1839,
+        "accuracy": 0.8279,
+        "precision": 0.1067,
+        "recall": 0.9375,
+        "f1_score": 0.1915,
         "confusion_matrix": {
           "labels": [
             "normal",
@@ -76,32 +81,32 @@
           ],
           "matrix": [
             [
-              7890,
-              1434
+              8317,
+              1759
             ],
             [
-              13,
-              163
+              14,
+              210
             ]
           ],
-          "tn": 7890,
-          "fp": 1434,
-          "fn": 13,
-          "tp": 163
+          "tn": 8317,
+          "fp": 1759,
+          "fn": 14,
+          "tp": 210
         },
         "support": {
-          "normal": 9324,
-          "anomaly": 176,
-          "total": 9500
+          "normal": 10076,
+          "anomaly": 224,
+          "total": 10300
         }
       }
     },
     "gold_metrics": null,
     "ml_only": {
-      "accuracy": 0.8458,
-      "precision": 0.0918,
-      "recall": 0.8239,
-      "f1_score": 0.1652,
+      "accuracy": 0.8279,
+      "precision": 0.1067,
+      "recall": 0.9375,
+      "f1_score": 0.1915,
       "confusion_matrix": {
         "labels": [
           "normal",
@@ -109,30 +114,30 @@
         ],
         "matrix": [
           [
-            7890,
-            1434
+            8317,
+            1759
           ],
           [
-            31,
-            145
+            14,
+            210
           ]
         ],
-        "tn": 7890,
-        "fp": 1434,
-        "fn": 31,
-        "tp": 145
+        "tn": 8317,
+        "fp": 1759,
+        "fn": 14,
+        "tp": 210
       },
       "support": {
-        "normal": 9324,
-        "anomaly": 176,
-        "total": 9500
+        "normal": 10076,
+        "anomaly": 224,
+        "total": 10300
       }
     },
     "hybrid_ml_rules": {
-      "accuracy": 0.8477,
-      "precision": 0.1021,
-      "recall": 0.9261,
-      "f1_score": 0.1839,
+      "accuracy": 0.8279,
+      "precision": 0.1067,
+      "recall": 0.9375,
+      "f1_score": 0.1915,
       "confusion_matrix": {
         "labels": [
           "normal",
@@ -140,23 +145,23 @@
         ],
         "matrix": [
           [
-            7890,
-            1434
+            8317,
+            1759
           ],
           [
-            13,
-            163
+            14,
+            210
           ]
         ],
-        "tn": 7890,
-        "fp": 1434,
-        "fn": 13,
-        "tp": 163
+        "tn": 8317,
+        "fp": 1759,
+        "fn": 14,
+        "tp": 210
       },
       "support": {
-        "normal": 9324,
-        "anomaly": 176,
-        "total": 9500
+        "normal": 10076,
+        "anomaly": 224,
+        "total": 10300
       }
     }
   },

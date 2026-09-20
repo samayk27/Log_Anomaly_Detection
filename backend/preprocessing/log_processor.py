@@ -9,8 +9,8 @@ from typing import List
 STOPWORDS = {
     'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from',
     'has', 'he', 'in', 'is', 'it', 'its', 'of', 'on', 'that', 'the',
-    'to', 'was', 'were', 'will', 'with', 'the', 'error', 'warning',
-    'info', 'debug', 'failed', 'success', 'request', 'response',
+    'to', 'was', 'were', 'will', 'with', 'the',
+    'info', 'debug', 'success', 'request', 'response',
     'http', 'https', 'com', 'org', 'net', 'ms', 'us', 'ok',
     'true', 'false', 'null', 'undefined',
 }
@@ -87,8 +87,9 @@ def process_logs(log_entries: List[dict]) -> List[dict]:
     result = []
     for entry in log_entries:
         msg = entry.get('message') or entry.get('raw', '')
+        level = entry.get('log_level', '')
         entry_copy = dict(entry)
-        entry_copy['cleaned_message'] = clean_message(msg)
+        entry_copy['cleaned_message'] = clean_message(f'{level} {msg}')
         result.append(entry_copy)
     return result
 
