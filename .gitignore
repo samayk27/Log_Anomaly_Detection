@@ -12,6 +12,21 @@ dist-ssr
 *.local
 datasets/test/
 
+# Python environments and generated files
+.venv/
+venv/
+env/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -24,3 +39,4 @@ datasets/test/
 *.sw?
 
 __pycache__
+backend/models/
