@@ -1,15 +1,8 @@
-#!/usr/bin/env python3
-"""
-Generate a comprehensive synthetic log dataset with 50k+ lines for training.
-Includes various log types, anomalies, and realistic patterns.
-"""
-
 import random
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# Templates for different log types
 LOG_TEMPLATES = {
     'normal_info': [
         "User {user} logged in successfully from {ip}",
@@ -81,7 +74,6 @@ LOG_TEMPLATES = {
     ]
 }
 
-# Sample data for template substitution
 USERS = ['admin', 'john_doe', 'jane_smith', 'mike_wilson', 'sarah_jones', 'bob_brown', 'alice_white', 'charlie_davis', 'emma_martin', 'david_lee']
 IP_ADDRESSES = ['192.168.1.100', '10.0.0.50', '172.16.0.25', '203.0.113.10', '198.51.100.20', '192.0.2.30', '10.1.1.100', '172.20.0.15']
 SUSPICIOUS_IPS = ['185.220.101.182', '109.234.38.41', '176.123.45.67', '94.102.49.90', '89.248.172.16']
@@ -92,16 +84,13 @@ METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 STATUS_CODES = ['200', '201', '204', '400', '401', '403', '404', '500', '502', '503']
 
 def generate_log_line(log_type=None):
-    """Generate a single log line based on type distribution."""
     if log_type is None:
-        # Weighted distribution - mostly normal logs, some anomalies
-        weights = [0.4, 0.2, 0.15, 0.08, 0.08, 0.06, 0.03]  # Normal logs, warnings, anomalies
+        weights = [0.4, 0.2, 0.15, 0.08, 0.08, 0.06, 0.03]
         log_type = random.choices(list(LOG_TEMPLATES.keys()), weights=weights)[0]
     
     templates = LOG_TEMPLATES[log_type]
     template = random.choice(templates)
     
-    # Template substitution
     substitutions = {
         'user': random.choice(USERS),
         'ip': random.choice(SUSPICIOUS_IPS if 'attack' in log_type or 'suspicious' in log_type else IP_ADDRESSES),
@@ -146,17 +135,14 @@ def generate_log_line(log_type=None):
         'latency': random.randint(500, 5000)
     }
     
-    # Apply substitutions
     try:
         log_line = template.format(**substitutions)
     except KeyError as e:
-        log_line = template  # Fallback if substitution fails
+        log_line = template
     
-    # Add timestamp and log level
     timestamp = datetime.now() - timedelta(minutes=random.randint(0, 1440))
     timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
     
-    # Determine log level based on type
     if 'critical' in log_type or 'fatal' in log_type:
         level = 'CRITICAL'
     elif 'error' in log_type:
@@ -171,7 +157,6 @@ def generate_log_line(log_type=None):
     return f"{timestamp_str} {level} {log_line}"
 
 def generate_dataset(num_lines=50000, output_file=None):
-    """Generate a comprehensive log dataset."""
     if output_file is None:
         output_file = Path(__file__).parent / "comprehensive_logs_50k.txt"
     
@@ -180,25 +165,18 @@ def generate_dataset(num_lines=50000, output_file=None):
     logs = []
     anomaly_count = 0
     
-    # Generate logs with different patterns
     for i in range(num_lines):
-        # Create some patterns for anomalies
-        if i % 1000 < 80:  # 8% anomaly rate
-            # Create attack sequences
+        if i % 1000 < 80:
             if i % 100 < 10:
-                # Brute force attack sequence
                 logs.append(generate_log_line('anomaly_security'))
                 anomaly_count += 1
             elif i % 100 < 20:
-                # System failures
                 logs.append(generate_log_line('anomaly_system'))
                 anomaly_count += 1
             elif i % 100 < 30:
-                # Performance issues
                 logs.append(generate_log_line('anomaly_performance'))
                 anomaly_count += 1
         else:
-            # Normal logs
             if i % 10 < 4:
                 logs.append(generate_log_line('normal_info'))
             elif i % 10 < 7:
@@ -206,10 +184,8 @@ def generate_dataset(num_lines=50000, output_file=None):
             else:
                 logs.append(generate_log_line('warning_normal'))
     
-    # Shuffle the logs to mix patterns
     random.shuffle(logs)
     
-    # Write to file
     with open(output_file, 'w', encoding='utf-8') as f:
         for log in logs:
             f.write(log + '\n')

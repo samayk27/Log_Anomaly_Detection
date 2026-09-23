@@ -1,6 +1,3 @@
-"""
-TF-IDF Vectorizer for log messages. Fit on training logs, save with joblib.
-"""
 import os
 from pathlib import Path
 
@@ -17,7 +14,6 @@ def create_vectorizer(
     max_df: float = 0.95,
     stop_words: str = 'english',
 ) -> TfidfVectorizer:
-    """Create and return a TfidfVectorizer with standard settings."""
     return TfidfVectorizer(
         max_features=max_features,
         ngram_range=ngram_range,
@@ -30,10 +26,6 @@ def create_vectorizer(
 
 
 def fit_vectorizer(messages: list[str], save_path: str | Path | None = None) -> TfidfVectorizer:
-    """
-    Fit vectorizer on training log messages.
-    messages: list of cleaned log message strings
-    """
     vectorizer = create_vectorizer()
     vectorizer.fit(messages)
     path = Path(save_path) if save_path else DEFAULT_VECTORIZER_PATH
@@ -43,7 +35,6 @@ def fit_vectorizer(messages: list[str], save_path: str | Path | None = None) -> 
 
 
 def load_vectorizer(path: str | Path | None = None) -> TfidfVectorizer:
-    """Load vectorizer from disk."""
     p = Path(path) if path else DEFAULT_VECTORIZER_PATH
     if not p.exists():
         raise FileNotFoundError(f"Vectorizer not found at {p}. Run training first.")
@@ -51,14 +42,12 @@ def load_vectorizer(path: str | Path | None = None) -> TfidfVectorizer:
 
 
 def transform(messages: list[str], vectorizer: TfidfVectorizer | None = None) -> "scipy.sparse":
-    """Convert log messages to TF-IDF vectors."""
     if vectorizer is None:
         vectorizer = load_vectorizer()
     return vectorizer.transform(messages)
 
 
 if __name__ == '__main__':
-    # Quick test with sample messages
     samples = [
         "block replicated nodes successfully",
         "connection timeout host",

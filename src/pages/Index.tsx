@@ -55,7 +55,6 @@ function apiAnomalyToPoint(a: RecentAnomaly, i: number): AnomalyPoint {
     detection_reason: a.detection_reason,
     service: a.service,
     log_level: a.log_level,
-    // Extract embedded metrics for charts
     errorCount: (a as any).errorCount ?? 0,
     avgResponseTime: (a as any).avgResponseTime ?? 200,
     uniqueTemplates: (a as any).uniqueTemplates ?? 1,
@@ -135,7 +134,6 @@ const Index = () => {
         await refetchBackend();
         setDataSource("backend");
       } catch {
-        // Fallback to client pipeline
       }
     },
     [backendAvailable, refetchBackend],

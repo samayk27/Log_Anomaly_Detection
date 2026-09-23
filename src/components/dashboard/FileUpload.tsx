@@ -12,7 +12,7 @@ interface FileUploadProps {
 }
 
 const ACCEPTED_EXTENSIONS = ['.log', '.txt', '.csv'];
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+const MAX_FILE_SIZE = 20 * 1024 * 1024; 
 
 type HistoryEntry = {
   id: string;
@@ -33,7 +33,7 @@ export function FileUpload({ onPipelineComplete, onClearSystem, onBackendIngest 
   const [backendIngested, setBackendIngested] = useState<boolean | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // history helpers
+  
   const loadHistory = (): HistoryEntry[] => {
     try {
       const raw = localStorage.getItem(HISTORY_KEY);
@@ -65,14 +65,14 @@ export function FileUpload({ onPipelineComplete, onClearSystem, onBackendIngest 
     setBackendIngested(null);
     setFileName(file.name);
 
-    // Validate extension
+    
     const ext = '.' + file.name.split('.').pop()?.toLowerCase();
     if (!ACCEPTED_EXTENSIONS.includes(ext)) {
       setError(`Invalid file type. Accepted: ${ACCEPTED_EXTENSIONS.join(', ')}`);
       return;
     }
 
-    // Validate size
+    
     if (file.size > MAX_FILE_SIZE) {
       setError('File exceeds 20MB limit.');
       return;
@@ -80,7 +80,7 @@ export function FileUpload({ onPipelineComplete, onClearSystem, onBackendIngest 
 
     setProcessing(true);
 
-    // Simulate pipeline stages for UX
+    
     for (let i = 0; i < stages.length; i++) {
       setPipelineStage(i);
       await new Promise(r => setTimeout(r, 400 + Math.random() * 300));
@@ -104,12 +104,12 @@ export function FileUpload({ onPipelineComplete, onClearSystem, onBackendIngest 
           await onBackendIngest(content);
           setBackendIngested(true);
         } catch {
-          // Client pipeline already ran; backend ingest failed (e.g. server down)
+          
           setBackendIngested(false);
         }
       }
 
-      // persist to history (most-recent-first)
+      
       try {
         const entry: HistoryEntry = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -166,7 +166,7 @@ export function FileUpload({ onPipelineComplete, onClearSystem, onBackendIngest 
   };
 
   const removeCurrentAndClear = () => {
-    // remove possible matches by fileName or parsedLogs
+    
     if (result) {
       const found = history.find(h => h.fileName === fileName || h.result.stats.parsedLogs === result.stats.parsedLogs);
       if (found) removeHistory(found.id);

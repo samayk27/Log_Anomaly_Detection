@@ -1,7 +1,3 @@
-"""
-Simplified advanced training pipeline for large-scale log anomaly detection.
-Optimized for performance and memory efficiency.
-"""
 
 import sys
 import os
@@ -14,17 +10,14 @@ from typing import Dict, List, Tuple, Optional, Any
 import warnings
 warnings.filterwarnings('ignore')
 
-# Add project root to path
 project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-# Import existing components
 from backend.parser.log_parser import parse_logs
 from backend.preprocessing.log_processor import process_logs
 from backend.rules.rule_engine import RuleEngine
 
-# Import new advanced components
 from backend.ml.advanced_features import AdvancedFeatureExtractor
 from backend.ml.advanced_vectorizer import AdvancedTextVectorizer
 from backend.ml.advanced_detectors import AdvancedAnomalyDetector
@@ -32,34 +25,31 @@ from backend.ml.sequence_detectors import SequenceEnsembleDetector
 from backend.ml.advanced_evaluation import AdvancedEvaluator, ModelComparisonReport
 
 class OptimizedAnomalyPipeline:
-    """Optimized pipeline for large-scale log anomaly detection."""
     
     def __init__(self, batch_size: int = 2000, sample_size: int = 10000):
         self.batch_size = batch_size
         self.sample_size = sample_size
         
-        # Initialize components
         self.feature_extractor = AdvancedFeatureExtractor(
             window_size_minutes=5, 
-            sequence_length=5  # Reduced for performance
+            sequence_length=5
         )
         self.text_vectorizer = AdvancedTextVectorizer(
-            max_features=5000,  # Reduced for performance
+            max_features=5000,
             ngram_range=(1, 2),
             use_svd=True,
-            svd_components=200  # Reduced for performance
+            svd_components=200
         )
         self.ml_detector = AdvancedAnomalyDetector(
-            contamination_rates=[0.05, 0.1]  # Reduced for performance
+            contamination_rates=[0.05, 0.1]
         )
         self.sequence_detector = SequenceEnsembleDetector(
-            sequence_length=5  # Reduced for performance
+            sequence_length=5
         )
         self.rule_engine = RuleEngine()
         self.evaluator = AdvancedEvaluator()
         
     def load_and_sample_data(self, dataset_paths: List[str]) -> Tuple[List[str], List[Dict]]:
-        """Load and sample data for efficient processing."""
         print("Loading and sampling data...")
         
         all_records = []
@@ -75,14 +65,11 @@ class OptimizedAnomalyPipeline:
         
         print(f"  Total records loaded: {len(all_records)}")
         
-        # Sample data for efficient processing
         if len(all_records) > self.sample_size:
             print(f"  Sampling {self.sample_size} records from {len(all_records)} total...")
-            # Stratified sampling to maintain anomaly distribution
             np.random.shuffle(all_records)
             all_records = all_records[:self.sample_size]
         
-        # Extract messages
         messages = [(r.get("cleaned_message") or r.get("message", "")).strip() 
                    for r in all_records]
         messages = [m for m in messages if len(m) > 3]
@@ -90,10 +77,8 @@ class OptimizedAnomalyPipeline:
         return messages, all_records
     
     def extract_features_optimized(self, messages: List[str]) -> Tuple[np.ndarray, List[Dict]]:
-        """Extract features with optimized processing."""
         print(f"Extracting features from {len(messages)} messages...")
         
-        # Process in larger batches for efficiency
         all_features = []
         all_parsed = []
         
@@ -106,37 +91,30 @@ class OptimizedAnomalyPipeline:
             all_features.append(batch_features)
             all_parsed.extend(batch_parsed)
         
-        # Combine batches
         features = np.vstack(all_features)
         print(f"  Features extracted: {features.shape}")
         
         return features, all_parsed
     
     def vectorize_text_optimized(self, messages: List[str]) -> np.ndarray:
-        """Vectorize text with optimized settings."""
         print("Vectorizing text data...")
         
-        # Fit and transform
         text_features = self.text_vectorizer.fit_transform(messages)
         print(f"  Text features shape: {text_features.shape}")
         
         return text_features
     
     def create_labels(self, parsed_logs: List[Dict]) -> np.ndarray:
-        """Create silver labels from parsed logs."""
         print("Creating silver labels...")
         
         labels = []
         for log in parsed_logs:
-            # Use rule engine to determine if this should be an anomaly
             rule_triggers = self.rule_engine.evaluate_log(log)
             is_anomaly = len(rule_triggers) > 0
             
-            # Additional heuristics
             message = log.get('message', '').lower()
             log_level = log.get('log_level', '')
             
-            # High-severity logs are more likely to be anomalies
             if log_level in ['ERROR', 'CRITICAL', 'FATAL']:
                 is_anomaly = True
             elif 'failed' in message or 'timeout' in message or 'error' in message:
@@ -151,26 +129,20 @@ class OptimizedAnomalyPipeline:
     
     def train_optimized_models(self, features: np.ndarray, text_features: np.ndarray, 
                              messages: List[str], labels: np.ndarray) -> Dict[str, Any]:
-        """Train models with optimized approach."""
         print("Training optimized models...")
         
-        # Combine structural and text features
         combined_features = np.hstack([features, text_features])
         print(f"  Combined features shape: {combined_features.shape}")
         
-        # Train ML detector
         print("  Training ML anomaly detector...")
         self.ml_detector.fit(combined_features, labels)
         
-        # Train sequence detector
         print("  Training sequence detector...")
         self.sequence_detector.fit(messages)
         
-        # Get rule-based scores
         print("  Computing rule-based scores...")
         rule_scores = self._compute_rule_scores(messages)
         
-        # Store training data
         training_data = {
             'features': features,
             'text_features': text_features,
@@ -183,33 +155,26 @@ class OptimizedAnomalyPipeline:
         return training_data
     
     def _compute_rule_scores(self, messages: List[str]) -> np.ndarray:
-        """Compute rule-based anomaly scores."""
         rule_scores = np.zeros(len(messages))
         
         for i, message in enumerate(messages):
-            # Create a simple log record for rule evaluation
             log_record = {'message': message, 'raw_message': message}
             
-            # Evaluate with rule engine
             rule_triggers = self.rule_engine.evaluate_log(log_record)
             
-            # Score based on number and severity of rule triggers
-            score = len(rule_triggers) * 20  # Each rule adds 20 points
-            rule_scores[i] = min(score, 100)  # Cap at 100
+            score = len(rule_triggers) * 20
+            rule_scores[i] = min(score, 100)
         
         return rule_scores
     
     def evaluate_optimized_models(self, training_data: Dict[str, Any], test_split: float = 0.3) -> Dict[str, Any]:
-        """Evaluate models with optimized approach."""
         print("Evaluating optimized models...")
         
-        # Split data
         X_combined = training_data['combined_features']
         y = training_data['labels']
         messages = training_data['messages']
         rule_scores = training_data['rule_scores']
         
-        # Train/test split
         split_idx = int(len(X_combined) * (1 - test_split))
         
         X_train = X_combined[:split_idx]
@@ -223,48 +188,38 @@ class OptimizedAnomalyPipeline:
         print(f"  Test set: {len(X_test)} samples")
         print(f"  Test anomalies: {np.sum(y_test)} out of {len(y_test)}")
         
-        # Evaluate ML models
         print("  Evaluating ML models...")
         ml_evaluation = self.ml_detector.evaluate_models(X_test, y_test)
         
-        # Get best models
         best_models = self.ml_detector.get_best_models(ml_evaluation)
         
-        # Evaluate ensemble
         print("  Evaluating ML ensemble...")
         ensemble_pred = self.ml_detector.ensemble_predict(X_test, method='majority_vote')
         ensemble_scores = self.ml_detector.decision_function(X_test)
         
-        # Get best ensemble score
         best_ensemble_score = np.zeros(len(X_test))
         for model_name in best_models.values():
             if model_name in ensemble_scores:
                 best_ensemble_score += ensemble_scores[model_name]
         best_ensemble_score /= len(best_models)
         
-        # Evaluate sequence detector
         print("  Evaluating sequence detector...")
         sequence_scores = self.sequence_detector.predict_anomaly_scores(messages_test)
         sequence_pred = (sequence_scores > 0.7).astype(int)
         
-        # Evaluate hybrid models
         print("  Evaluating hybrid models...")
         
-        # ML + Rules hybrid
         ml_rule_scores = 0.7 * best_ensemble_score + 0.3 * (rule_scores_test / 100.0)
         ml_rule_pred = (ml_rule_scores > 0.5).astype(int)
         
-        # ML + Sequence hybrid
         ml_seq_scores = 0.6 * best_ensemble_score + 0.4 * sequence_scores
         ml_seq_pred = (ml_seq_scores < np.percentile(ml_seq_scores, 90)).astype(int)
         
-        # Full hybrid
         full_hybrid_scores = (0.5 * best_ensemble_score + 
                               0.3 * (rule_scores_test / 100.0) + 
                               0.2 * sequence_scores)
         full_hybrid_pred = (full_hybrid_scores > 0.4).astype(int)
         
-        # Collect all predictions
         all_predictions = {
             'ML_Ensemble': ensemble_pred,
             'ML_Best_Ensemble': (best_ensemble_score < np.percentile(best_ensemble_score, 90)).astype(int),
@@ -283,7 +238,6 @@ class OptimizedAnomalyPipeline:
             'Hybrid_Full': full_hybrid_scores
         }
         
-        # Evaluate all models
         comparison_results = self.evaluator.compare_models(y_test, all_predictions, all_scores)
         
         return {
@@ -297,14 +251,11 @@ class OptimizedAnomalyPipeline:
         }
     
     def generate_comparison_report(self, results: Dict[str, Any]) -> str:
-        """Generate comprehensive comparison report."""
         print("Generating comparison report...")
         
-        # Create comparison report
         report_generator = ModelComparisonReport(self.evaluator)
         report = report_generator.generate_text_report()
         
-        # Add before/after comparison
         baseline_metrics = {
             'accuracy': 0.8933,
             'precision': 0.0784,
@@ -312,7 +263,6 @@ class OptimizedAnomalyPipeline:
             'f1_score': 0.1382
         }
         
-        # Get best hybrid model metrics
         comparison_results = results['comparison_results']
         best_models = comparison_results.get('best_models', {})
         
@@ -329,7 +279,6 @@ class OptimizedAnomalyPipeline:
                 
                 improvement_summary.append(f"F1-Score Improvement: {baseline_metrics['f1_score']:.4f} → {new_f1:.4f} ({improvement:+.2f}%)")
         
-        # Add model rankings
         if 'model_rankings' in comparison_results:
             improvement_summary.append("\nTOP MODELS BY METRIC:")
             for metric, rankings in comparison_results['model_rankings'].items():
@@ -340,21 +289,17 @@ class OptimizedAnomalyPipeline:
         return report + "\n".join(improvement_summary)
     
     def save_results(self, results: Dict[str, Any], output_dir: str):
-        """Save all results."""
         output_path = Path(output_dir)
         output_path.mkdir(exist_ok=True)
         
         print(f"Saving results to {output_dir}...")
         
-        # Save evaluation results
         self.evaluator.save_results(str(output_path / "evaluation_results.json"))
         
-        # Save comprehensive report
         report = self.generate_comparison_report(results)
         with open(output_path / "comparison_report.txt", 'w', encoding='utf-8') as f:
             f.write(report)
         
-        # Save training summary
         training_data = results['training_data']
         summary = {
             'total_messages': len(training_data['messages']),
@@ -374,18 +319,15 @@ class OptimizedAnomalyPipeline:
 
 
 def main():
-    """Main training function."""
     print("="*80)
     print("OPTIMIZED ADVANCED LOG ANOMALY DETECTION PIPELINE")
     print("="*80)
     
-    # Initialize pipeline
     pipeline = OptimizedAnomalyPipeline(
         batch_size=2000,
         sample_size=10000
     )
     
-    # Load datasets
     dataset_dir = project_root / "datasets"
     dataset_files = [
         str(dataset_dir / "comprehensive_logs_50k.txt"),
@@ -399,26 +341,19 @@ def main():
         print("Error: Insufficient data for training")
         return
     
-    # Extract features
     features, parsed_logs = pipeline.extract_features_optimized(messages)
     
-    # Vectorize text
     text_features = pipeline.vectorize_text_optimized(messages)
     
-    # Create labels
     labels = pipeline.create_labels(parsed_logs)
     
-    # Train models
     training_data = pipeline.train_optimized_models(features, text_features, messages, labels)
     
-    # Evaluate models
     results = pipeline.evaluate_optimized_models(training_data)
     
-    # Generate and print report
     report = pipeline.generate_comparison_report(results)
     print(report)
     
-    # Save results
     output_dir = project_root / "backend" / "optimized_results"
     pipeline.save_results(results, str(output_dir))
     

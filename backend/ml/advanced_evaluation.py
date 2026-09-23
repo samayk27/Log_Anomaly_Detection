@@ -1,7 +1,3 @@
-"""
-Enhanced evaluation metrics and model comparison for log anomaly detection.
-Provides comprehensive evaluation with ROC-AUC, precision-recall curves, and detailed analysis.
-"""
 
 import numpy as np
 import pandas as pd
@@ -19,14 +15,12 @@ import warnings
 warnings.filterwarnings('ignore')
 
 class AdvancedEvaluator:
-    """Advanced evaluation with comprehensive metrics and visualizations."""
     
     def __init__(self):
         self.results = {}
         self.comparison_results = {}
         
     def calculate_basic_metrics(self, y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
-        """Calculate basic classification metrics."""
         return {
             'accuracy': accuracy_score(y_true, y_pred),
             'precision': precision_score(y_true, y_pred, zero_division=0),
@@ -37,7 +31,6 @@ class AdvancedEvaluator:
         }
     
     def calculate_confusion_matrix(self, y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, int]:
-        """Calculate confusion matrix components."""
         tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
         
         return {
@@ -49,20 +42,19 @@ class AdvancedEvaluator:
         }
     
     def calculate_advanced_metrics(self, y_true: np.ndarray, y_scores: np.ndarray) -> Dict[str, float]:
-        """Calculate advanced metrics including ROC-AUC."""
         try:
             auc = roc_auc_score(y_true, y_scores)
         except ValueError:
-            auc = 0.5  # Default for invalid cases
+            auc = 0.5  
         
-        # Calculate precision-recall curve
+        
         try:
             precision, recall, thresholds = precision_recall_curve(y_true, y_scores)
             pr_auc = np.trapz(precision, recall)
         except ValueError:
             pr_auc = 0.0
         
-        # Calculate optimal threshold
+        
         fpr, tpr, thresholds = roc_curve(y_true, y_scores)
         optimal_idx = np.argmax(tpr - fpr)
         optimal_threshold = thresholds[optimal_idx]
@@ -79,20 +71,19 @@ class AdvancedEvaluator:
                       y_true: np.ndarray, 
                       y_pred: np.ndarray, 
                       y_scores: Optional[np.ndarray] = None) -> Dict[str, Any]:
-        """Comprehensive evaluation of a single model."""
         
-        # Basic metrics
+        
         basic_metrics = self.calculate_basic_metrics(y_true, y_pred)
         
-        # Confusion matrix
+        
         conf_matrix = self.calculate_confusion_matrix(y_true, y_pred)
         
-        # Advanced metrics (if scores available)
+        
         advanced_metrics = {}
         if y_scores is not None:
             advanced_metrics = self.calculate_advanced_metrics(y_true, y_scores)
         
-        # Combine all metrics
+        
         evaluation = {
             'model_name': model_name,
             'basic_metrics': basic_metrics,
@@ -106,7 +97,6 @@ class AdvancedEvaluator:
     
     def compare_models(self, y_true: np.ndarray, predictions_dict: Dict[str, np.ndarray], 
                       scores_dict: Optional[Dict[str, np.ndarray]] = None) -> Dict[str, Any]:
-        """Compare multiple models and create ranking."""
         
         comparison = {
             'model_rankings': {},
@@ -115,12 +105,12 @@ class AdvancedEvaluator:
             'summary_statistics': {}
         }
         
-        # Evaluate all models
+        
         for model_name, y_pred in predictions_dict.items():
             y_scores = scores_dict.get(model_name) if scores_dict else None
             self.evaluate_model(model_name, y_true, y_pred, y_scores)
         
-        # Create rankings for each metric
+        
         metrics = ['accuracy', 'precision', 'recall', 'f1_score', 'roc_auc']
         
         for metric in metrics:
@@ -132,13 +122,13 @@ class AdvancedEvaluator:
                     model_scores[model_name] = result['advanced_metrics'][metric]
             
             if model_scores:
-                # Sort models by metric (descending)
+                
                 sorted_models = sorted(model_scores.items(), key=lambda x: x[1], reverse=True)
                 comparison['model_rankings'][metric] = sorted_models
                 comparison['metric_comparison'][metric] = model_scores
                 comparison['best_models'][metric] = sorted_models[0][0] if sorted_models else None
         
-        # Calculate summary statistics
+        
         all_metrics_data = []
         for result in self.results.values():
             model_data = {'model': result['model_name']}
@@ -156,7 +146,6 @@ class AdvancedEvaluator:
         return comparison
     
     def create_comparison_table(self) -> pd.DataFrame:
-        """Create a comparison table of all models."""
         if not self.results:
             return pd.DataFrame()
         
@@ -169,11 +158,11 @@ class AdvancedEvaluator:
         
         df = pd.DataFrame(table_data)
         
-        # Reorder columns for better readability
+        
         column_order = ['Model', 'accuracy', 'precision', 'recall', 'f1_score', 
                        'roc_auc', 'pr_auc', 'support_positive', 'support_negative']
         
-        # Keep only available columns
+        
         available_columns = [col for col in column_order if col in df.columns]
         other_columns = [col for col in df.columns if col not in available_columns]
         final_columns = available_columns + other_columns
@@ -181,7 +170,6 @@ class AdvancedEvaluator:
         return df[final_columns].round(4)
     
     def print_detailed_results(self):
-        """Print detailed evaluation results."""
         if not self.results:
             print("No evaluation results available.")
             return
@@ -195,7 +183,7 @@ class AdvancedEvaluator:
             print(f"MODEL: {model_name.upper()}")
             print(f"{'='*60}")
             
-            # Basic metrics
+            
             print("\nBASIC METRICS:")
             basic = result['basic_metrics']
             print(f"  Accuracy:    {basic['accuracy']:.4f}")
@@ -204,7 +192,7 @@ class AdvancedEvaluator:
             print(f"  F1-Score:    {basic['f1_score']:.4f}")
             print(f"  Support:     {basic['support_positive']} positive, {basic['support_negative']} negative")
             
-            # Confusion matrix
+            
             print("\nCONFUSION MATRIX:")
             conf = result['confusion_matrix']
             print(f"  True Positives:    {conf['true_positives']}")
@@ -213,7 +201,7 @@ class AdvancedEvaluator:
             print(f"  False Negatives:   {conf['false_negatives']}")
             print(f"  Total Samples:     {conf['total_samples']}")
             
-            # Advanced metrics
+            
             if result['advanced_metrics']:
                 print("\nADVANCED METRICS:")
                 adv = result['advanced_metrics']
@@ -222,7 +210,7 @@ class AdvancedEvaluator:
                 print(f"  Optimal Threshold: {adv['optimal_threshold']:.4f}")
                 print(f"  Max(TPR-FPR):      {adv['max_tpr_minus_fpr']:.4f}")
         
-        # Model comparison
+        
         if self.comparison_results:
             print(f"\n{'='*80}")
             print("MODEL COMPARISON SUMMARY")
@@ -236,7 +224,6 @@ class AdvancedEvaluator:
                     print(f"  {metric.upper()}: {best_model} ({score:.4f})")
     
     def save_results(self, filepath: str):
-        """Save evaluation results to JSON file."""
         results_data = {
             'individual_results': self.results,
             'comparison_results': self.comparison_results,
@@ -250,7 +237,6 @@ class AdvancedEvaluator:
         print(f"Evaluation results saved to {filepath}")
     
     def load_results(self, filepath: str):
-        """Load evaluation results from JSON file."""
         with open(filepath, 'r') as f:
             results_data = json.load(f)
         
@@ -260,7 +246,6 @@ class AdvancedEvaluator:
         print(f"Evaluation results loaded from {filepath}")
     
     def create_improvement_summary(self, baseline_results: Dict, improved_results: Dict) -> Dict[str, Any]:
-        """Create summary of improvements between baseline and improved models."""
         
         summary = {
             'improvements': {},
@@ -275,14 +260,14 @@ class AdvancedEvaluator:
             baseline_value = 0
             improved_value = 0
             
-            # Get baseline value
+            
             for result in baseline_results.values():
                 if metric in result.get('basic_metrics', {}):
                     baseline_value = result['basic_metrics'][metric]
                 elif metric in result.get('advanced_metrics', {}):
                     baseline_value = result['advanced_metrics'][metric]
             
-            # Get improved value
+            
             for result in improved_results.values():
                 if metric in result.get('basic_metrics', {}):
                     improved_value = result['basic_metrics'][metric]
@@ -301,7 +286,7 @@ class AdvancedEvaluator:
                     if improvement < -10:
                         summary['significant_changes'][metric] = f"Significant degradation: {improvement:.2f}%"
         
-        # Overall assessment
+        
         if len(summary['improvements']) > len(summary['degradations']):
             summary['overall_assessment'] = "Overall improvement achieved"
         elif len(summary['improvements']) < len(summary['degradations']):
@@ -313,13 +298,11 @@ class AdvancedEvaluator:
 
 
 class ModelComparisonReport:
-    """Generate comprehensive model comparison reports."""
     
     def __init__(self, evaluator: AdvancedEvaluator):
         self.evaluator = evaluator
     
     def generate_text_report(self) -> str:
-        """Generate a detailed text report."""
         if not self.evaluator.results:
             return "No evaluation results available."
         
@@ -330,7 +313,7 @@ class ModelComparisonReport:
         report.append(f"Total Models Evaluated: {len(self.evaluator.results)}")
         report.append("")
         
-        # Model comparison table
+        
         df = self.evaluator.create_comparison_table()
         if not df.empty:
             report.append("MODEL COMPARISON TABLE:")
@@ -338,7 +321,7 @@ class ModelComparisonReport:
             report.append(df.to_string(index=False))
             report.append("")
         
-        # Best models by metric
+        
         if self.evaluator.comparison_results:
             best_models = self.evaluator.comparison_results['best_models']
             report.append("BEST MODELS BY METRIC:")
@@ -349,7 +332,7 @@ class ModelComparisonReport:
                     report.append(f"{metric.upper()}: {model} ({score:.4f})")
             report.append("")
         
-        # Detailed model analysis
+        
         report.append("DETAILED MODEL ANALYSIS:")
         report.append("-" * 35)
         
@@ -374,7 +357,6 @@ class ModelComparisonReport:
         return "\n".join(report)
     
     def save_report(self, filepath: str):
-        """Save the report to a text file."""
         report = self.generate_text_report()
         
         with open(filepath, 'w') as f:

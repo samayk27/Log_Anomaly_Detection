@@ -1,13 +1,3 @@
-"""
-Training and evaluation pipeline for log anomaly detection.
-
-This script:
-1) Loads all supported datasets under datasets/
-2) Builds weak (silver) anomaly labels for evaluation
-3) Trains an Isolation Forest model and evaluates ML-only + Hybrid (ML+Rules)
-4) Saves metrics to backend/models/evaluation_metrics.json
-5) Retrains final model on full corpus and saves artifacts
-"""
 import json
 import random
 import sys
@@ -16,7 +6,6 @@ from pathlib import Path
 
 from sklearn.model_selection import train_test_split
 
-# Ensure project root is on sys.path when the script is run directly or imported
 project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
@@ -44,7 +33,6 @@ EXCLUDED_DATASET_FILENAMES = {GOLD_CSV_PATH.name}
 
 
 def discover_dataset_paths(dataset_dir: Path = TRAIN_DATASET_DIR) -> list[Path]:
-    """Discover supported log files recursively under a dataset directory."""
     if not dataset_dir.exists():
         return []
     paths = [
@@ -56,7 +44,6 @@ def discover_dataset_paths(dataset_dir: Path = TRAIN_DATASET_DIR) -> list[Path]:
 
 
 def load_processed_logs(dataset_dir: Path = TRAIN_DATASET_DIR) -> tuple[list[dict], list[str]]:
-    """Load, parse and preprocess logs from all dataset files."""
     records: list[dict] = []
     sources: list[str] = []
     for path in discover_dataset_paths(dataset_dir):
@@ -70,7 +57,6 @@ def load_processed_logs(dataset_dir: Path = TRAIN_DATASET_DIR) -> tuple[list[dic
 
 
 def split_dataset(test_ratio: float = 0.2, random_state: int = RANDOM_STATE) -> dict:
-    """Split each file in datasets/train into train and datasets/test copies."""
     if not 0 < test_ratio < 1:
         raise ValueError("test_ratio must be between 0 and 1")
 
@@ -91,7 +77,6 @@ def split_dataset(test_ratio: float = 0.2, random_state: int = RANDOM_STATE) -> 
         relative_path = source_path.relative_to(TRAIN_DATASET_DIR)
         test_path = TEST_DATASET_DIR / relative_path
         test_path.parent.mkdir(parents=True, exist_ok=True)
-        # Rewrite the source file so no held-out record remains in training.
         source_path.write_text("\n".join(train_lines) + "\n", encoding="utf-8")
         test_path.write_text("\n".join(test_lines) + "\n", encoding="utf-8")
         summary["files"].append({
@@ -106,10 +91,6 @@ def split_dataset(test_ratio: float = 0.2, random_state: int = RANDOM_STATE) -> 
 
 
 def load_messages() -> list[str]:
-    """
-    Backward-compatible helper used by API startup fallback.
-    Returns cleaned messages from all discovered dataset files.
-    """
     records, _ = load_processed_logs(TRAIN_DATASET_DIR)
     msgs = [(r.get("cleaned_message") or r.get("message", "")).strip() for r in records]
     return [m for m in msgs if len(m) > 3]
@@ -192,7 +173,6 @@ def main():
     ml_metrics = evaluate_binary(y_test, y_ml)
     hybrid_metrics = evaluate_binary(y_test, y_hybrid)
 
-    # Optional: gold-label evaluation (if user provides labeled_eval.csv)
     used_labeling = "silver"
     silver_metrics = {
         "ml_only": ml_metrics,
@@ -202,7 +182,6 @@ def main():
     if GOLD_CSV_PATH.exists():
         gold_logs_for_rules, gold_ml_messages, y_gold = load_gold_labels_csv(GOLD_CSV_PATH)
         if len(y_gold) >= 5:
-            # Require both classes to make metrics meaningful
             if len(set(y_gold)) >= 2:
                 ml_gold, hybrid_gold = evaluate_gold(
                     gold_logs_for_rules,
@@ -217,7 +196,6 @@ def main():
                 }
                 used_labeling = "gold"
 
-    # With an explicit split, keep the test records out of the production model.
     full_model, full_vectorizer = train(messages)
 
     payload = {

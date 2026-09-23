@@ -5,8 +5,6 @@
 
 import { LogEntry, AnomalyPoint, FeatureVector } from '@/types/dataTypes';
 
-// ─── Log Parsing (Drain-style template extraction) ───────────────────────────
-
 const TIMESTAMP_RE = /^(\d{4}[-/]\d{2}[-/]\d{2}[\sT]\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s*/;
 const LEVEL_RE = /\b(INFO|WARN|WARNING|ERROR|DEBUG|TRACE|FATAL|CRITICAL)\b/i;
 const NUMBER_RE = /\b\d+(\.\d+)?\b/g;
@@ -28,16 +26,16 @@ function extractTemplate(message: string): { template: string; params: string[] 
   const params: string[] = [];
   let template = message;
 
-  // Replace IPs
+  
   template = template.replace(IP_RE, (m) => { params.push(m); return '<*>'; });
-  // Replace hex
+  
   template = template.replace(HEX_RE, (m) => { params.push(m); return '<*>'; });
-  // Replace numbers (but not inside <*>)
+  
   template = template.replace(NUMBER_RE, (m) => { params.push(m); return '<*>'; });
-  // Replace file paths
+  
   template = template.replace(PATH_RE, (m) => { params.push(m); return '<*>'; });
 
-  // Collapse consecutive <*> with different separators
+  
   template = template.replace(/(<\*>\s*)+/g, '<*> ').trim();
 
   return { template, params };
@@ -65,19 +63,19 @@ export function parseLogFile(content: string): LogEntry[] {
     const line = lines[i].trim();
     if (!line) continue;
 
-    // Extract timestamp
+    
     const tsMatch = line.match(TIMESTAMP_RE);
     const timestamp = tsMatch ? tsMatch[1].replace('T', ' ') : new Date().toISOString().replace('T', ' ').slice(0, 19);
 
-    // Extract level
+    
     const lvlMatch = line.match(LEVEL_RE);
     const level = lvlMatch ? normalizeLevel(lvlMatch[1]) : 'INFO';
 
-    // Get message (strip timestamp and level)
+    
     let message = line;
     if (tsMatch) message = message.slice(tsMatch[0].length);
     if (lvlMatch) message = message.replace(lvlMatch[0], '').trim();
-    // Clean leading separators
+    
     message = message.replace(/^[\s\-:|\[\]]+/, '').trim();
 
     const { template, params } = extractTemplate(message);
@@ -97,16 +95,16 @@ export function parseLogFile(content: string): LogEntry[] {
   return logs.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 }
 
-// ─── Feature Extraction ──────────────────────────────────────────────────────
+
 
 export function extractFeatures(logs: LogEntry[], windowMinutes: number = 10): FeatureVector[] {
   if (logs.length === 0) return [];
 
-  // Group logs into time windows
+  
   const windows = new Map<string, LogEntry[]>();
 
   for (const log of logs) {
-    // Parse hour:minute, quantize to windowMinutes
+    
     const parts = log.timestamp.split(' ');
     const timePart = parts[parts.length - 1] || '00:00:00';
     const [h, m] = timePart.split(':').map(Number);
@@ -124,7 +122,7 @@ export function extractFeatures(logs: LogEntry[], windowMinutes: number = 10): F
     const uniqueTemplates = new Set(windowLogs.map(l => l.template)).size;
     const eventFrequency = windowLogs.length;
 
-    // Simulate avg response time from log content (look for ms patterns)
+    
     const responseTimes: number[] = [];
     for (const log of windowLogs) {
       const msMatch = log.raw.match(/(\d+)\s*ms/);
@@ -134,7 +132,7 @@ export function extractFeatures(logs: LogEntry[], windowMinutes: number = 10): F
       ? Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length)
       : Math.round(50 + (errorCount * 30) + Math.random() * 50);
 
-    // Compute standard deviation of error distribution
+    
     const values = [errorCount, warnCount, uniqueTemplates];
     const mean = values.reduce((a, b) => a + b, 0) / values.length;
     const stdDeviation = Math.round(
@@ -155,7 +153,7 @@ export function extractFeatures(logs: LogEntry[], windowMinutes: number = 10): F
   return features;
 }
 
-// ─── Anomaly Detection (Isolation Forest simulation + Statistical) ───────────
+
 
 function computeStatistics(values: number[]) {
   const n = values.length;
@@ -180,7 +178,7 @@ function isolationForestScore(feature: FeatureVector, stats: {
 }): number {
   const dims: number[] = [];
 
-  // Deviation in each dimension (normalized)
+  
   if (stats.errorStats.std > 0) {
     dims.push(Math.abs(feature.errorCount - stats.errorStats.mean) / stats.errorStats.std);
   }
@@ -196,15 +194,15 @@ function isolationForestScore(feature: FeatureVector, stats: {
 
   if (dims.length === 0) return 0;
 
-  // Average z-score across dimensions, then sigmoid to 0-1
+  
   const avgZ = dims.reduce((a, b) => a + b, 0) / dims.length;
-  return 1 / (1 + Math.exp(-avgZ + 2)); // Shifted sigmoid
+  return 1 / (1 + Math.exp(-avgZ + 2)); 
 }
 
 export function detectAnomalies(features: FeatureVector[]): AnomalyPoint[] {
   if (features.length === 0) return [];
 
-  // Compute baselines
+  
   const errorStats = computeStatistics(features.map(f => f.errorCount));
   const rtStats = computeStatistics(features.map(f => f.avgResponseTime));
   const templateStats = computeStatistics(features.map(f => f.uniqueTemplates));
@@ -212,7 +210,7 @@ export function detectAnomalies(features: FeatureVector[]): AnomalyPoint[] {
 
   const stats = { errorStats, rtStats, templateStats, freqStats };
 
-  // Statistical thresholds
+  
   const errorThreshold = errorStats.mean + 3 * errorStats.std;
   const rtThreshold = rtStats.mean + 3 * rtStats.std;
 
@@ -242,7 +240,7 @@ export function detectAnomalies(features: FeatureVector[]): AnomalyPoint[] {
   });
 }
 
-// ─── Full Pipeline ───────────────────────────────────────────────────────────
+
 
 export interface PipelineResult {
   logs: LogEntry[];

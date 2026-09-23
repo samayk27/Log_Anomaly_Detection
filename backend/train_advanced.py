@@ -1,7 +1,3 @@
-"""
-Main training pipeline for advanced log anomaly detection.
-Integrates all components: feature engineering, vectorization, detection models, and evaluation.
-"""
 
 import sys
 import os
@@ -14,17 +10,14 @@ from typing import Dict, List, Tuple, Optional, Any
 import warnings
 warnings.filterwarnings('ignore')
 
-# Add project root to path
 project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-# Import existing components
 from backend.parser.log_parser import parse_logs
 from backend.preprocessing.log_processor import process_logs
 from backend.rules.rule_engine import RuleEngine
 
-# Import new advanced components
 from backend.ml.advanced_features import AdvancedFeatureExtractor
 from backend.ml.advanced_vectorizer import AdvancedTextVectorizer
 from backend.ml.advanced_detectors import AdvancedAnomalyDetector, HybridAnomalyDetector
@@ -32,7 +25,6 @@ from backend.ml.sequence_detectors import SequenceEnsembleDetector
 from backend.ml.advanced_evaluation import AdvancedEvaluator, ModelComparisonReport
 
 class AdvancedAnomalyPipeline:
-    """Advanced pipeline for log anomaly detection with multiple models."""
     
     def __init__(self, 
                  contamination_rates: List[float] = [0.02, 0.05, 0.1],
@@ -43,7 +35,6 @@ class AdvancedAnomalyPipeline:
         self.sequence_length = sequence_length
         self.batch_size = batch_size
         
-        # Initialize components
         self.feature_extractor = AdvancedFeatureExtractor(
             window_size_minutes=5, 
             sequence_length=sequence_length
@@ -63,13 +54,11 @@ class AdvancedAnomalyPipeline:
         self.rule_engine = RuleEngine()
         self.evaluator = AdvancedEvaluator()
         
-        # Storage for results
         self.training_data = {}
         self.model_results = {}
         self.comparison_results = {}
         
     def load_and_preprocess_data(self, dataset_paths: List[str]) -> Tuple[List[str], List[Dict]]:
-        """Load and preprocess log data from multiple datasets."""
         print("Loading and preprocessing data...")
         
         all_records = []
@@ -89,7 +78,6 @@ class AdvancedAnomalyPipeline:
         
         print(f"  Total records loaded: {len(all_records)}")
         
-        # Extract messages
         messages = [(r.get("cleaned_message") or r.get("message", "")).strip() 
                    for r in all_records]
         messages = [m for m in messages if len(m) > 3]
@@ -97,13 +85,11 @@ class AdvancedAnomalyPipeline:
         return messages, all_records
     
     def extract_features_batched(self, messages: List[str]) -> Tuple[np.ndarray, List[Dict]]:
-        """Extract features in batches to handle large datasets."""
         print(f"Extracting features from {len(messages)} messages...")
         
         all_features = []
         all_parsed = []
         
-        # Process in batches
         for i in range(0, len(messages), self.batch_size):
             batch_messages = messages[i:i + self.batch_size]
             print(f"  Processing batch {i//self.batch_size + 1}/{(len(messages)-1)//self.batch_size + 1}")
@@ -112,37 +98,30 @@ class AdvancedAnomalyPipeline:
             all_features.append(batch_features)
             all_parsed.extend(batch_parsed)
         
-        # Combine batches
         features = np.vstack(all_features)
         print(f"  Features extracted: {features.shape}")
         
         return features, all_parsed
     
     def vectorize_text(self, messages: List[str]) -> np.ndarray:
-        """Vectorize text data."""
         print("Vectorizing text data...")
         
-        # Fit and transform
         text_features = self.text_vectorizer.fit_transform(messages)
         print(f"  Text features shape: {text_features.shape}")
         
         return text_features
     
     def create_labels(self, parsed_logs: List[Dict]) -> np.ndarray:
-        """Create silver labels from parsed logs."""
         print("Creating silver labels...")
         
         labels = []
         for log in parsed_logs:
-            # Use rule engine to determine if this should be an anomaly
             rule_triggers = self.rule_engine.evaluate_log(log)
             is_anomaly = len(rule_triggers) > 0
             
-            # Additional heuristics
             message = log.get('message', '').lower()
             log_level = log.get('log_level', '')
             
-            # High-severity logs are more likely to be anomalies
             if log_level in ['ERROR', 'CRITICAL', 'FATAL']:
                 is_anomaly = True
             elif 'failed' in message or 'timeout' in message or 'error' in message:
@@ -157,26 +136,20 @@ class AdvancedAnomalyPipeline:
     
     def train_models(self, features: np.ndarray, text_features: np.ndarray, 
                     messages: List[str], labels: np.ndarray) -> Dict[str, Any]:
-        """Train all models."""
         print("Training models...")
         
-        # Combine structural and text features
         combined_features = np.hstack([features, text_features])
         print(f"  Combined features shape: {combined_features.shape}")
         
-        # Train ML detector
         print("  Training ML anomaly detector...")
         self.ml_detector.fit(combined_features, labels)
         
-        # Train sequence detector
         print("  Training sequence detector...")
         self.sequence_detector.fit(messages)
         
-        # Get rule-based scores
         print("  Computing rule-based scores...")
         rule_scores = self._compute_rule_scores(messages)
         
-        # Store training data
         self.training_data = {
             'features': features,
             'text_features': text_features,
@@ -189,34 +162,27 @@ class AdvancedAnomalyPipeline:
         return self.training_data
     
     def _compute_rule_scores(self, messages: List[str]) -> np.ndarray:
-        """Compute rule-based anomaly scores."""
         rule_scores = np.zeros(len(messages))
         
         for i, message in enumerate(messages):
-            # Create a simple log record for rule evaluation
             log_record = {'message': message, 'raw_message': message}
             
-            # Evaluate with rule engine
             rule_triggers = self.rule_engine.evaluate_log(log_record)
             
-            # Score based on number and severity of rule triggers
-            score = len(rule_triggers) * 20  # Each rule adds 20 points
-            rule_scores[i] = min(score, 100)  # Cap at 100
+            score = len(rule_triggers) * 20
+            rule_scores[i] = min(score, 100)
         
         return rule_scores
     
     def evaluate_all_models(self, test_split: float = 0.2) -> Dict[str, Any]:
-        """Evaluate all models with train/test split."""
         print("Evaluating models...")
         
-        # Split data
         data = self.training_data
         X_combined = data['combined_features']
         y = data['labels']
         messages = data['messages']
         rule_scores = data['rule_scores']
         
-        # Simple train/test split
         split_idx = int(len(X_combined) * (1 - test_split))
         
         X_train = X_combined[:split_idx]
@@ -230,49 +196,39 @@ class AdvancedAnomalyPipeline:
         print(f"  Test set: {len(X_test)} samples")
         print(f"  Test anomalies: {np.sum(y_test)} out of {len(y_test)}")
         
-        # Evaluate ML models
         print("  Evaluating ML models...")
         ml_evaluation = self.ml_detector.evaluate_models(X_test, y_test)
         
-        # Get best models
         best_models = self.ml_detector.get_best_models(ml_evaluation)
         
-        # Evaluate ensemble
         print("  Evaluating ML ensemble...")
         ensemble_pred = self.ml_detector.ensemble_predict(X_test, method='majority_vote')
         ensemble_scores = self.ml_detector.decision_function(X_test)
         
-        # Get best ensemble score (average of best models)
         best_ensemble_score = np.zeros(len(X_test))
         for model_name in best_models.values():
             if model_name in ensemble_scores:
                 best_ensemble_score += ensemble_scores[model_name]
         best_ensemble_score /= len(best_models)
         
-        # Evaluate sequence detector
         print("  Evaluating sequence detector...")
         sequence_scores = self.sequence_detector.predict_anomaly_scores(messages_test)
         sequence_pred = (sequence_scores > 0.7).astype(int)
         
-        # Evaluate hybrid models
         print("  Evaluating hybrid models...")
         
-        # ML + Rules hybrid
         hybrid_detector = HybridAnomalyDetector(self.ml_detector, rule_weight=0.4)
         hybrid_detector.add_rule_scores(rule_scores_test)
         hybrid_pred = hybrid_detector.predict_hybrid(X_test, method='weighted_average')
         
-        # ML + Sequence hybrid
         ml_seq_scores = 0.6 * best_ensemble_score + 0.4 * sequence_scores
         ml_seq_pred = (ml_seq_scores < np.percentile(ml_seq_scores, 90)).astype(int)
         
-        # Full hybrid (ML + Rules + Sequence)
         full_hybrid_scores = (0.4 * best_ensemble_score + 
                               0.3 * (rule_scores_test / 100.0) + 
                               0.3 * sequence_scores)
         full_hybrid_pred = (full_hybrid_scores > 0.5).astype(int)
         
-        # Collect all predictions
         all_predictions = {
             'ML_Ensemble': ensemble_pred,
             'ML_Best_Ensemble': (best_ensemble_score < np.percentile(best_ensemble_score, 90)).astype(int),
@@ -291,10 +247,8 @@ class AdvancedAnomalyPipeline:
             'Hybrid_Full': full_hybrid_scores
         }
         
-        # Evaluate all models
         comparison_results = self.evaluator.compare_models(y_test, all_predictions, all_scores)
         
-        # Store results
         self.model_results = {
             'ml_evaluation': ml_evaluation,
             'best_models': best_models,
@@ -309,14 +263,11 @@ class AdvancedAnomalyPipeline:
         return self.model_results
     
     def generate_comprehensive_report(self) -> str:
-        """Generate a comprehensive evaluation report."""
         print("Generating comprehensive report...")
         
-        # Create comparison report
         report_generator = ModelComparisonReport(self.evaluator)
         report = report_generator.generate_text_report()
         
-        # Add additional sections
         additional_info = []
         additional_info.append("\n" + "="*80)
         additional_info.append("ADVANCED PIPELINE CONFIGURATION")
@@ -341,29 +292,23 @@ class AdvancedAnomalyPipeline:
         return report + "\n".join(additional_info)
     
     def save_all_results(self, output_dir: str):
-        """Save all results and models."""
         output_path = Path(output_dir)
         output_path.mkdir(exist_ok=True)
         
         print(f"Saving results to {output_dir}...")
         
-        # Save models
         models_dir = output_path / "models"
         self.ml_detector.save_models(str(models_dir))
         self.sequence_detector.save_models(str(models_dir))
         
-        # Save vectorizer
         self.text_vectorizer.save(str(models_dir / "text_vectorizer.pkl"))
         
-        # Save evaluation results
         self.evaluator.save_results(str(output_path / "evaluation_results.json"))
         
-        # Save comprehensive report
         report = self.generate_comprehensive_report()
         with open(output_path / "comprehensive_report.txt", 'w') as f:
             f.write(report)
         
-        # Save training data summary
         training_summary = {
             'total_messages': len(self.training_data.get('messages', [])),
             'feature_shape': self.training_data.get('combined_features', np.array([])).shape,
@@ -382,19 +327,16 @@ class AdvancedAnomalyPipeline:
 
 
 def main():
-    """Main training function."""
     print("="*80)
     print("ADVANCED LOG ANOMALY DETECTION PIPELINE")
     print("="*80)
     
-    # Initialize pipeline
     pipeline = AdvancedAnomalyPipeline(
         contamination_rates=[0.02, 0.05, 0.1],
         sequence_length=10,
         batch_size=1000
     )
     
-    # Load datasets
     dataset_dir = project_root / "datasets"
     dataset_files = [
         str(dataset_dir / "comprehensive_logs_50k.txt"),
@@ -408,26 +350,19 @@ def main():
         print("Error: Insufficient data for training")
         return
     
-    # Extract features
     features, parsed_logs = pipeline.extract_features_batched(messages)
     
-    # Vectorize text
     text_features = pipeline.vectorize_text(messages)
     
-    # Create labels
     labels = pipeline.create_labels(parsed_logs)
     
-    # Train models
     pipeline.train_models(features, text_features, messages, labels)
     
-    # Evaluate models
     results = pipeline.evaluate_all_models(test_split=0.2)
     
-    # Generate and print report
     report = pipeline.generate_comprehensive_report()
     print(report)
     
-    # Save results
     output_dir = project_root / "backend" / "advanced_results"
     pipeline.save_all_results(str(output_dir))
     

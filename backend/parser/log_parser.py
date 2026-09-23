@@ -1,7 +1,3 @@
-"""
-Log Parsing Engine - Supports multiple log formats with automatic type detection.
-Extracts: timestamp, service, log_level, message, ip_address, user_id, status_code
-"""
 import re
 import json
 import csv
@@ -12,7 +8,6 @@ from dataclasses import dataclass, asdict
 
 @dataclass
 class ParsedLog:
-    """Structured log entry with extracted fields."""
     timestamp: str
     service: str
     log_level: str
@@ -28,7 +23,6 @@ class ParsedLog:
         return asdict(self)
 
 
-# Regex patterns for different log formats
 APACHE_NGINX_RE = re.compile(
     r'^(\S+ \S+) (\S+) (\S+) \[([^\]]+)\] "([^"]*)" (\d{3}) (\d+|-)?'
 )
@@ -121,7 +115,6 @@ def _extract_status(text: str) -> str | None:
 
 
 def detect_log_type(line: str) -> str:
-    """Detect log format: apache_nginx, json, csv, application, plain."""
     line = line.strip()
     if not line:
         return 'plain'
@@ -133,8 +126,6 @@ def detect_log_type(line: str) -> str:
             pass
     if BGL_RE.match(line):
         return 'bgl'
-    # csv detection: require at least three commas and a timestamp start.  Many
-    # application messages contain commas, so we avoid false positives.
     if TIMESTAMP_RE.match(line) and line.count(',') >= 3:
         return 'csv'
     if APACHE_NGINX_RE.match(line):
@@ -145,7 +136,6 @@ def detect_log_type(line: str) -> str:
 
 
 def parse_apache_nginx(line: str) -> ParsedLog | None:
-    """Parse Apache/Nginx combined log format."""
     m = APACHE_NGINX_RE.match(line)
     if not m:
         return None
@@ -164,7 +154,6 @@ def parse_apache_nginx(line: str) -> ParsedLog | None:
 
 
 def parse_json(line: str) -> ParsedLog | None:
-    """Parse JSON structured log."""
     try:
         data = json.loads(line)
         ts = data.get('timestamp', data.get('time', data.get('@timestamp', '')))
@@ -191,7 +180,6 @@ def parse_json(line: str) -> ParsedLog | None:
 
 
 def parse_bgl(line: str) -> ParsedLog | None:
-    """Parse Blue Gene/L records and remove volatile node identifiers."""
     parts = line.split(maxsplit=9)
     if len(parts) < 10:
         return None
@@ -211,7 +199,6 @@ def parse_bgl(line: str) -> ParsedLog | None:
 
 
 def parse_csv(line: str) -> ParsedLog | None:
-    """Parse CSV-style log (timestamp,service,log_level,message,...)."""
     parts = [p.strip() for p in next(csv.reader(StringIO(line)), [])]
     if len(parts) < 4:
         return None
@@ -233,7 +220,6 @@ def parse_csv(line: str) -> ParsedLog | None:
 
 
 def parse_application(line: str) -> ParsedLog:
-    """Parse application log (timestamp level message)."""
     ts_match = TIMESTAMP_RE.match(line)
     timestamp_match = ts_match or ANY_TIMESTAMP_RE.search(line)
     timestamp = timestamp_match.group('timestamp').replace('T', ' ')[:19] if timestamp_match else ''
@@ -243,10 +229,8 @@ def parse_application(line: str) -> ParsedLog:
     message = remainder
     if lvl_match:
         message = remainder.replace(lvl_match.group(0), '', 1)
-    # strip leading separators
     message = re.sub(r'^[\s\-:|]+', '', message).strip() or line
 
-    # if the message begins with a bracketed service name, extract it
     svc_match = re.match(r'^\[([^\]]+)\]\s*(.*)', message)
     service = None
     if svc_match:
@@ -269,7 +253,6 @@ def parse_application(line: str) -> ParsedLog:
 
 
 def parse_plain(line: str) -> ParsedLog:
-    """Parse plain text log."""
     ts = ANY_TIMESTAMP_RE.search(line)
     timestamp = ts.group('timestamp').replace('T', ' ')[:19] if ts else ''
     lvl = LEVEL_RE.search(line)
@@ -289,7 +272,6 @@ def parse_plain(line: str) -> ParsedLog:
 
 
 def parse_line(line: str) -> ParsedLog | None:
-    """Parse a single log line with automatic format detection."""
     line = line.strip()
     if not line:
         return None
@@ -308,10 +290,6 @@ def parse_line(line: str) -> ParsedLog | None:
 
 
 def parse_logs(content: str) -> list[dict[str, Any]]:
-    """
-    Parse multiple log lines and return list of structured dictionaries.
-    Also works with file path - reads file if content looks like a path (single line).
-    """
     lines = []
     if '\n' not in content and len(content) < 260:
         try:

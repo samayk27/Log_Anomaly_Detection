@@ -1,8 +1,3 @@
-"""
-Rule-based anomaly detection to complement ML.
-Detects: repeated login failures, brute force, DB connection failures,
-unauthorized access, unusual request frequency, suspicious IPs.
-"""
 import re
 from collections import defaultdict
 from dataclasses import dataclass
@@ -12,13 +7,13 @@ from typing import List
 @dataclass
 class RuleResult:
     triggered: bool
-    severity: str  # HIGH, MEDIUM, LOW
-    status: str    # Anomaly or Normal
+    severity: str                     
+    status: str                       
     rule_name: str
     message: str
 
 
-# Patterns for rule matching
+                            
 LOGIN_FAILURE_PATTERNS = [
     re.compile(r'authentication\s+failed', re.I),
     re.compile(r'login\s+failed', re.I),
@@ -86,7 +81,6 @@ def _match_any(text: str, patterns: List[re.Pattern]) -> bool:
 def check_repeated_login_failures(
     logs: List[dict], current_idx: int, window: int = 10
 ) -> RuleResult:
-    """Detect repeated login failures within a time window."""
     start = max(0, current_idx - window)
     slice_logs = logs[start:current_idx + 1]
     failures = sum(
@@ -103,7 +97,6 @@ def check_repeated_login_failures(
 
 
 def check_login_failure(message: str) -> RuleResult:
-    """Detect login failure patterns."""
     text = (message or '').lower()
     if _match_any(text, LOGIN_FAILURE_PATTERNS):
         return RuleResult(True, 'HIGH', 'Anomaly', 'login_failure',
@@ -112,7 +105,6 @@ def check_login_failure(message: str) -> RuleResult:
 
 
 def check_brute_force(message: str) -> RuleResult:
-    """Detect brute force attempt patterns."""
     text = (message or '').lower()
     if _match_any(text, BRUTE_FORCE_PATTERNS):
         return RuleResult(True, 'HIGH', 'Anomaly', 'brute_force',
@@ -121,7 +113,6 @@ def check_brute_force(message: str) -> RuleResult:
 
 
 def check_db_connection_failure(message: str) -> RuleResult:
-    """Detect database connection failures."""
     text = (message or '').lower()
     if _match_any(text, DB_FAILURE_PATTERNS):
         return RuleResult(True, 'HIGH', 'Anomaly', 'database_connection_failure',
@@ -130,7 +121,6 @@ def check_db_connection_failure(message: str) -> RuleResult:
 
 
 def check_unauthorized_access(message: str) -> RuleResult:
-    """Detect unauthorized access attempts."""
     text = (message or '').lower()
     if _match_any(text, UNAUTHORIZED_PATTERNS):
         return RuleResult(True, 'HIGH', 'Anomaly', 'unauthorized_access',
@@ -141,7 +131,6 @@ def check_unauthorized_access(message: str) -> RuleResult:
 def check_unusual_request_frequency(
     logs: List[dict], current_idx: int, threshold: int = 50
 ) -> RuleResult:
-    """Detect unusual request frequency (many logs in short window)."""
     window = 20
     start = max(0, current_idx - window)
     count = len(logs[start:current_idx + 1])
@@ -152,7 +141,6 @@ def check_unusual_request_frequency(
 
 
 def check_critical_errors(message: str) -> RuleResult:
-    """Detect critical error patterns."""
     text = (message or '').lower()
     if _match_any(text, CRITICAL_ERROR_PATTERNS):
         return RuleResult(True, 'HIGH', 'Anomaly', 'critical_error',
@@ -161,7 +149,6 @@ def check_critical_errors(message: str) -> RuleResult:
 
 
 def check_suspicious_ip(log: dict) -> RuleResult:
-    """Flag suspicious IP patterns (internal IPs in auth logs, etc.)."""
     ip = log.get('ip_address') or ''
     msg = (log.get('message') or '') + (log.get('raw') or '')
     if not ip:
@@ -178,9 +165,6 @@ def check_suspicious_ip(log: dict) -> RuleResult:
 
 
 def run_rules_single(log: dict, all_logs: List[dict], idx: int) -> RuleResult | None:
-    """
-    Run all rules on a single log. Returns first triggered rule or None.
-    """
     message = log.get('message') or log.get('raw') or ''
     checks = [
         check_critical_errors(message),
@@ -199,18 +183,10 @@ def run_rules_single(log: dict, all_logs: List[dict], idx: int) -> RuleResult | 
 
 
 def run_rules_batch(logs: List[dict]) -> List[RuleResult | None]:
-    """Run rules on each log in the batch."""
     return [run_rules_single(log, logs, i) for i, log in enumerate(logs)]
 
 
 def combine_with_ml(rule_result: RuleResult | None, ml_prediction: str) -> tuple[str, str, str]:
-    """
-    Final decision logic:
-    - if rule triggers -> Anomaly (source: Rules or ML + Rules)
-    - else if ML predicts anomaly -> Anomaly (source: ML)
-    - else -> Normal (source: ML)
-    Returns (final_prediction, source, reason)
-    """
     rule_triggered = rule_result and rule_result.triggered
     ml_anomaly = ml_prediction == 'Anomaly'
     reason = ''
@@ -230,18 +206,16 @@ def combine_with_ml(rule_result: RuleResult | None, ml_prediction: str) -> tuple
 
 
 class RuleEngine:
-    """Wrapper class for rule-based anomaly detection."""
     
     def __init__(self):
         self.rules_cache = {}
     
     def evaluate_log(self, log_record: dict) -> List[str]:
-        """Evaluate a single log record and return triggered rule names."""
         triggered_rules = []
         
         message = log_record.get('message', '') + log_record.get('raw_message', '')
         
-        # Check individual rules
+                                
         checks = [
             check_brute_force(message),
             check_db_connection_failure(message),
@@ -256,5 +230,4 @@ class RuleEngine:
         return triggered_rules
     
     def evaluate_batch(self, logs: List[dict]) -> List[List[str]]:
-        """Evaluate multiple logs and return triggered rules for each."""
         return [self.evaluate_log(log) for log in logs]

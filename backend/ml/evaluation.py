@@ -1,10 +1,3 @@
-"""
-Evaluation helpers for anomaly detection training.
-
-Because this project currently has no human-labeled anomaly dataset, we build
-"silver" labels from domain heuristics (rule triggers + severe/error patterns)
-to provide repeatable project metrics (accuracy, precision, recall, F1).
-"""
 from __future__ import annotations
 
 import csv
@@ -42,10 +35,6 @@ ANOMALY_PATTERNS = [
 
 
 def build_silver_labels(logs: list[dict]) -> list[int]:
-    """
-    Build weak labels for evaluation:
-    anomaly=1 if rules trigger OR severe log level OR anomaly keyword/pattern.
-    """
     labels: list[int] = []
     for idx, log in enumerate(logs):
         dataset_label = log.get("dataset_label")
@@ -63,7 +52,6 @@ def build_silver_labels(logs: list[dict]) -> list[int]:
 
 
 def evaluate_binary(y_true: list[int], y_pred: list[int]) -> dict:
-    """Return standard binary classification metrics."""
     cm = confusion_matrix(y_true, y_pred, labels=[0, 1]).tolist()
     return {
         "accuracy": round(float(accuracy_score(y_true, y_pred)), 4),
@@ -87,7 +75,6 @@ def evaluate_binary(y_true: list[int], y_pred: list[int]) -> dict:
 
 
 def build_hybrid_predictions(test_logs: list[dict], ml_labels: list[int]) -> list[int]:
-    """Fuse rule engine and ML labels with project decision logic."""
     preds: list[int] = []
     for i, (log, ml_lab) in enumerate(zip(test_logs, ml_labels)):
         rule_res = run_rules_single(log, test_logs, i)
@@ -98,7 +85,6 @@ def build_hybrid_predictions(test_logs: list[dict], ml_labels: list[int]) -> lis
 
 
 def save_metrics(path: str | Path, payload: dict) -> Path:
-    """Save metrics JSON to disk."""
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -106,14 +92,6 @@ def save_metrics(path: str | Path, payload: dict) -> Path:
 
 
 def _parse_label_value(v: object) -> int | None:
-    """
-    Convert CSV label fields into {0,1}.
-
-    Accepts:
-    - 0/1, true/false
-    - 'normal'/'anomaly' (case-insensitive)
-    - any int-like string
-    """
     if v is None:
         return None
     if isinstance(v, (int, float)):
@@ -137,23 +115,10 @@ def _parse_label_value(v: object) -> int | None:
 
 
 def load_gold_labels_csv(csv_path: str | Path) -> tuple[list[dict], list[str], list[int]]:
-    """
-    Load gold labels from CSV.
-
-    Expected columns (flexible):
-    - message column: `message` or `raw_message`
-    - label column: `label`, `is_anomaly`, or `anomaly`
-
-    The returned lists align by index:
-    - logs_for_rules: list[dict] (used by rule engine)
-    - ml_messages: list[str] (used by ML model / TF-IDF)
-    - y_true: list[int] (0 normal, 1 anomaly)
-    """
     path = Path(csv_path)
     if not path.exists():
         raise FileNotFoundError(f"Gold labels CSV not found: {path}")
 
-    # Import parser lazily to avoid heavy import costs for callers that don't use gold eval.
     from backend.parser.log_parser import parse_logs
 
     ml_messages: list[str] = []
@@ -207,11 +172,6 @@ def evaluate_gold(
     model,
     vectorizer,
 ) -> tuple[dict, dict]:
-    """
-    Evaluate ML-only and Hybrid (ML+Rules) using gold labels.
-
-    Returns: (ml_metrics, hybrid_metrics)
-    """
     ml_output = predict(gold_ml_messages, model, vectorizer)
     y_ml = [1 if o["prediction"] == "Anomaly" else 0 for o in ml_output]
     ml_metrics = evaluate_binary(y_true, y_ml)
